@@ -46,27 +46,56 @@ public:
 		return result;
 	}*/
 
-	Vector2f& operator+=(Vector2f& other) {
+	float calcLength() {
+		return sqrt(x * x + y * y);
+	}
+
+	Vector2f normalize() {
+		float length = calcLength();
+		return Vector2f(x / length, y / length);
+	}
+
+	Vector2f reflect(const Vector2f& normal) {
+		float dot = *this * normal;
+		Vector2f thing = *this - normal * dot * 2;
+		return -thing;
+	}
+
+	Vector2f& operator+=(const Vector2f& other) {				// IMPORTANT: const is super important here so that this can accept r-value refs. const lvalue ref can accept rvalue ref while lvalue ref cannot accept rvalue ref.
 		x += other.x;
 		y += other.y;
 		return *this;
 	}
 
-	Vector2f& operator-=(Vector2f& other) {
+	Vector2f operator-(const Vector2f& other) const {
+		return Vector2f(x - other.x, y - other.y);
+	}
+
+	Vector2f& operator-=(const Vector2f& other) {
 		x -= other.x;
 		y -= other.y;
 		return *this;
 	}
 
-	Vector2f& operator*(float factor) {				// This doesn't automatically do the reverse one too, you have to implement that separately.
+	float operator*(const Vector2f& other) {
+		return x * other.x + y * other.y;
+	}
+
+	Vector2f operator*(float factor) const {
 		Vector2f result(x * factor, y * factor);
 		return result;
 	}
+	friend Vector2f operator*(float factor, const Vector2f& vector) { return vector * factor; }			// Implemented to take care of reverse case of the other mult function. Uses friend so that the function is accessible in global scope, which is necessary because float is the main participant now instead of Vector2f when it's this way around.
 
 	Vector2f& operator*=(float factor) {
 		x *= factor;
 		y *= factor;
 		return *this;
+	}
+
+	Vector2f operator-() {
+		Vector2f result(-x, -y);
+		return result;
 	}
 };
 
@@ -85,12 +114,12 @@ public:
 	}
 
 	void update() {
-		pos += vel;
 		if (pos.x > windowWidth || pos.x < 0) { vel.x = -vel.x; }
 		if (pos.y > windowHeight || pos.y < 0) { vel.y = -vel.y; }
+		pos += vel;
 	}
 
-	void resolveCollision(Particle other) {
+	void resolveCollision(Particle& other) {
 
 		pos -= vel;
 		other.pos -= other.vel;
@@ -115,7 +144,7 @@ public:
 			
 		}
 		else if (r == 0) {	// This shouldn't ever happen, don't know what it would mean.
-
+			DebugBreak;
 		}
 		else {				// Two solutions.
 			r = sqrt(r);
@@ -130,7 +159,7 @@ public:
 
 
 
-			float actualX = 0;
+			float actualX;
 			if (x1 < x2) {											// x1 is the right one to choose.
 				actualX = x1;
 			}
@@ -141,10 +170,32 @@ public:
 			if (x1 > 1 || x1 < 0) { actualX = x2; }
 			else if (x2 > 1 || x2 < 0) { actualX = x1; }
 
+			if (actualX == 0) {
+				pos += vel;
+				other.pos += other.vel;
+				return;
+			}
+
 			pos += vel * actualX;
-			other.pos += other.vel * actualX;				// Doesn't actually do anything because lack of reference, which is ok.
+			other.pos += other.vel * actualX;
+			Vector2f normal = (pos - other.pos).normalize();
+			
+			Vector2f relV = vel - other.vel;
+			relV = -relV;
+			relV = relV.reflect(normal);
+			vel += relV;
+
+			relV = other.vel - vel;
+			relV = -relV;
+			relV = relV.reflect(-normal);
+			other.vel += relV;
+
+			//vel = -vel;
+			//vel = vel.reflect(normal);
+			//other.vel = -other.vel;
+			//other.vel = other.vel.reflect(-normal);
 			debuglogger::out << "collision detected!" << debuglogger::endl;
-			//DebugBreak();
+			return;
 		}
 
 		pos += vel;
@@ -154,7 +205,7 @@ public:
 };
 
 Particle a(Vector2f(200, 200), Vector2f(1, 1));
-Particle b(Vector2f(400, 400), Vector2f(-1, -1));
+Particle b(Vector2f(400, 400), Vector2f(1.5f, 1));
 
 void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we don't have to do this boilerplate every time. Good idea or no?
 

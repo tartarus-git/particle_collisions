@@ -52,6 +52,17 @@ public:
 		return *this;
 	}
 
+	Vector2f& operator-=(Vector2f& other) {
+		x -= other.x;
+		y -= other.y;
+		return *this;
+	}
+
+	Vector2f& operator*(float factor) {				// This doesn't automatically do the reverse one too, you have to implement that separately.
+		Vector2f result(x * factor, y * factor);
+		return result;
+	}
+
 	Vector2f& operator*=(float factor) {
 		x *= factor;
 		y *= factor;
@@ -81,11 +92,69 @@ public:
 
 	void resolveCollision(Particle other) {
 
+		pos -= vel;
+		other.pos -= other.vel;
+		// a coefficient
+		float a = vel.x * vel.x + other.vel.x * other.vel.x - 2 * vel.x * other.vel.x;
+		a += vel.y * vel.y + other.vel.y * other.vel.y - 2 * vel.y * other.vel.y;
+
+		// b coefficient
+		float b = 2 * vel.x * pos.x - 2 * vel.x * other.pos.x - pos.x * other.vel.x * 2 + 2 * other.vel.x * other.pos.x;
+		b += 2 * vel.y * pos.y - 2 * vel.y * other.pos.y - pos.y * other.vel.y * 2 + 2 * other.vel.y * other.pos.y;
+
+		// c coefficient
+		float c = pos.x * pos.x - 2 * pos.x * other.pos.x + other.pos.x * other.pos.x;
+		c += pos.y * pos.y - 2 * pos.y * other.pos.y + other.pos.y * other.pos.y;
+		c -= (PARTICLE_RADIUS + PARTICLE_RADIUS) * (PARTICLE_RADIUS + PARTICLE_RADIUS);
+
+		b /= a;
+		c /= a;
+
+		float r = b * b / 4 - c;
+		if (r < 0) {		// Parallel lines, deoesn't work.
+			
+		}
+		else if (r == 0) {	// This shouldn't ever happen, don't know what it would mean.
+
+		}
+		else {				// Two solutions.
+			r = sqrt(r);
+			b = -b / 2;
+			float x1 = b + r;
+			float x2 = b - r;
+			if ((x1 > 1 || x1 < 0) && (x2 > 1 || x2 < 0)) {			// Both solutions are out of bounds of the current contex, no collision.
+				pos += vel;
+				other.pos += other.vel;
+				return;
+			}
+
+
+
+			float actualX = 0;
+			if (x1 < x2) {											// x1 is the right one to choose.
+				actualX = x1;
+			}
+			else {
+				actualX = x2;
+			}
+
+			if (x1 > 1 || x1 < 0) { actualX = x2; }
+			else if (x2 > 1 || x2 < 0) { actualX = x1; }
+
+			pos += vel * actualX;
+			other.pos += other.vel * actualX;				// Doesn't actually do anything because lack of reference, which is ok.
+			debuglogger::out << "collision detected!" << debuglogger::endl;
+			//DebugBreak();
+		}
+
+		pos += vel;
+		other.pos += other.vel;
+
 	}
 };
 
 Particle a(Vector2f(200, 200), Vector2f(1, 1));
-Particle b(Vector2f(300, 300), Vector2f(2, 1));
+Particle b(Vector2f(400, 400), Vector2f(-1, -1));
 
 void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we don't have to do this boilerplate every time. Good idea or no?
 

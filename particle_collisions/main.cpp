@@ -170,30 +170,18 @@ public:
 			if (x1 > 1 || x1 < 0) { actualX = x2; }
 			else if (x2 > 1 || x2 < 0) { actualX = x1; }
 
-			if (actualX == 0) {
-				pos += vel;
-				other.pos += other.vel;
-				return;
-			}
-
 			pos += vel * actualX;
 			other.pos += other.vel * actualX;
-			Vector2f normal = (pos - other.pos).normalize();
-			
-			Vector2f relV = vel - other.vel;
-			relV = -relV;
-			relV = relV.reflect(normal);
-			vel += relV;
 
-			relV = other.vel - vel;
-			relV = -relV;
-			relV = relV.reflect(-normal);
+
+			Vector2f normal = (other.pos - pos).normalize();
+			other.pos += normal * 0.1f;
+			pos -= normal * 0.1f;
+			Vector2f relV = ((vel * normal) * normal) - ((other.vel * normal) * normal);
 			other.vel += relV;
+			vel -= relV;
 
-			//vel = -vel;
-			//vel = vel.reflect(normal);
-			//other.vel = -other.vel;
-			//other.vel = other.vel.reflect(-normal);
+
 			debuglogger::out << "collision detected!" << debuglogger::endl;
 			return;
 		}
@@ -205,7 +193,7 @@ public:
 };
 
 Particle a(Vector2f(200, 200), Vector2f(1, 1));
-Particle b(Vector2f(400, 400), Vector2f(1.5f, 1));
+Particle b(Vector2f(400, 400), Vector2f(-1, -1));
 
 void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we don't have to do this boilerplate every time. Good idea or no?
 

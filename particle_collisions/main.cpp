@@ -9,6 +9,9 @@
 
 #include "OpenCLBindingsAndHelpers.h"		// TODO: Actually use OpenCL to parallelize this thing. Right now, we're just doing CPU stuff.
 
+#define PARTICLE_MIN_DIST (PARTICLE_RADIUS * 2)
+#define SQUARE_PARTICLE_MIN_DIST (PARTICLE_MIN_DIST * PARTICLE_MIN_DIST)
+
 unsigned int windowWidth;
 unsigned int windowHeight;
 
@@ -122,50 +125,69 @@ public:
 	}
 
 	void resolveCollision(Particle& other) {
-
-		pos -= vel;
-		other.pos -= other.vel;
 		// a coefficient
+		// x component
 		double a = vel.x * vel.x + other.vel.x * other.vel.x - 2 * vel.x * other.vel.x;
+		// y component
 		a += vel.y * vel.y + other.vel.y * other.vel.y - 2 * vel.y * other.vel.y;
 
 		// b coefficient
-		double b = 2 * vel.x * pos.x - 2 * vel.x * other.pos.x - pos.x * other.vel.x * 2 + 2 * other.vel.x * other.pos.x;
-		b += 2 * vel.y * pos.y - 2 * vel.y * other.pos.y - pos.y * other.vel.y * 2 + 2 * other.vel.y * other.pos.y;
+		Vector2f diff = pos - other.pos;
+		
+		// x component
+		double b = 2 * diff.x * (vel.x - other.vel.x);
+		// y component
+		b += 2 * diff.y * (vel.y - other.vel.y);
 
 		// c coefficient
+		// x component
 		double c = pos.x * pos.x - 2 * pos.x * other.pos.x + other.pos.x * other.pos.x;
+		// y component
 		c += pos.y * pos.y - 2 * pos.y * other.pos.y + other.pos.y * other.pos.y;
-		c -= (PARTICLE_RADIUS + PARTICLE_RADIUS) * (PARTICLE_RADIUS + PARTICLE_RADIUS);
+		// making one side equal to zero
+		c -= SQUARE_PARTICLE_MIN_DIST;
 
-		if (a == 0) {					// I'm pretty sure this means that the balls aren't moving RELATIVE TO EACHOTHER <-- This is because of the last term of a.
-
-			//if (b == 0) {				// Means the distance between the balls isn't changing, which is always the case if they aren't moving relative to eachother, so they're not relatively moving and they're 1. colliding, 2. too far away, 3. too close to eachother.
-				pos += vel;
-				other.pos += other.vel;					// TODO: Since this triggers if the balls are ever inside eachother and not moving relatively, you might want to move them outside eachother just as a safety, even if that should never happen if you spawn the balls correctly.
-				return;
-			//}			<-- If statement can be commented out because a is never 0 without b being 0. Having this branch creates problems because b might not be exactly zero because rounding error and then you don't do what you're supposed to do even though you should.
+		// If a is 0, particles have same velocity and either aren't colliding or are colliding (the latter should theoretically never happen unless the particles get spawned wrong).
+		if (a == 0) {
+			float length = diff.calcLength();
+			float dist = SQUARE_PARTICLE_MIN_DIST - length;
+			if (dist < 0) {														// In case particles DO end up inside each other, resolve the collision.
+				diff *= dist / length;
+				other.pos += diff;
+				pos -= diff;
+			}
+			update();
+			other.update();
+			return;
 		}
 
+		// Reduce a coefficient to 1.
 		b /= a;
 		c /= a;
 
-		double r = b * b / 4 - c;
-		if (r < 0) {		// I assume this happens when parallel lines are too far away from eachother to produce a hit.
-			
-		}
-		else if (r > 0 || r == 0) {					// More than one solution happens all the time. One solution happens when parallel lines are exactly r1 + r2 away from eachother and just one point is hittable.
+		// Construct sudo p term.
+		b /= 2;
 
-			if (collisionFlag) { pos += vel; other.pos += other.vel; return; }
+		// Construct intra-root term.
+		double r = b * b - c;
+
+		// If no collisions (because parallel trajectories that are too far away from each other for a parallel collision), update and return.
+		if (r < 0) { update(); other.update(); return; }
+
+		// Following gets triggered if 1 collision (parallel lines that are exactly the right distance away), or 2 collisions (all other non-handled collisions).
+		// Inefficient to have separate branch for 1 collision because it happens so rarely, just handle it through the math of 2 collision handler.
+		if (r >= 0) {
+
+			if (collisionFlag) { update(); other.update(); return; }
 
 			if (r < 0) { DebugBreak(); }
 			r = sqrt(r);
-			b = -b / 2;
+			b = -b;					// Construct full p term.
 			double x1 = b + r;
 			double x2 = b - r;
 			if ((x1 > 1 || x1 <= 0) && (x2 > 1 || x2 <= 0)) {			// Both solutions are out of bounds of the current contex, no collision.
-				pos += vel;
-				other.pos += other.vel;
+				update();
+				other.update();
 				return;
 			}
 
@@ -198,8 +220,8 @@ public:
 			return;
 		}
 
-		pos += vel;
-		other.pos += other.vel;
+		update();
+		other.update();
 
 	}
 };
@@ -232,8 +254,6 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 		a.render();
 		b.render();
 		BitBlt(finalG, 0, 0, windowWidth, windowHeight, g, 0, 0, SRCCOPY);
-		a.update();
-		b.update();
 		a.resolveCollision(b);
 	}
 }

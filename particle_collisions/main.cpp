@@ -101,6 +101,8 @@ public:
 
 HDC g;
 
+bool collisionFlag = false;
+
 class Particle {
 public:
 	Vector2f pos;
@@ -114,8 +116,8 @@ public:
 	}
 
 	void update() {
-		if (pos.x > windowWidth || pos.x < 0) { vel.x = -vel.x; }
-		if (pos.y > windowHeight || pos.y < 0) { vel.y = -vel.y; }
+		if (pos.x > windowWidth || pos.x < 0) { vel.x = -vel.x; collisionFlag = false; }
+		if (pos.y > windowHeight || pos.y < 0) { vel.y = -vel.y; collisionFlag = false; }
 		pos += vel;
 	}
 
@@ -124,34 +126,44 @@ public:
 		pos -= vel;
 		other.pos -= other.vel;
 		// a coefficient
-		float a = vel.x * vel.x + other.vel.x * other.vel.x - 2 * vel.x * other.vel.x;
+		double a = vel.x * vel.x + other.vel.x * other.vel.x - 2 * vel.x * other.vel.x;
 		a += vel.y * vel.y + other.vel.y * other.vel.y - 2 * vel.y * other.vel.y;
 
 		// b coefficient
-		float b = 2 * vel.x * pos.x - 2 * vel.x * other.pos.x - pos.x * other.vel.x * 2 + 2 * other.vel.x * other.pos.x;
+		double b = 2 * vel.x * pos.x - 2 * vel.x * other.pos.x - pos.x * other.vel.x * 2 + 2 * other.vel.x * other.pos.x;
 		b += 2 * vel.y * pos.y - 2 * vel.y * other.pos.y - pos.y * other.vel.y * 2 + 2 * other.vel.y * other.pos.y;
 
 		// c coefficient
-		float c = pos.x * pos.x - 2 * pos.x * other.pos.x + other.pos.x * other.pos.x;
+		double c = pos.x * pos.x - 2 * pos.x * other.pos.x + other.pos.x * other.pos.x;
 		c += pos.y * pos.y - 2 * pos.y * other.pos.y + other.pos.y * other.pos.y;
 		c -= (PARTICLE_RADIUS + PARTICLE_RADIUS) * (PARTICLE_RADIUS + PARTICLE_RADIUS);
+
+		if (a == 0) {					// I'm pretty sure this means that the balls aren't moving RELATIVE TO EACHOTHER <-- This is because of the last term of a.
+
+			//if (b == 0) {				// Means the distance between the balls isn't changing, which is always the case if they aren't moving relative to eachother, so they're not relatively moving and they're 1. colliding, 2. too far away, 3. too close to eachother.
+				pos += vel;
+				other.pos += other.vel;					// TODO: Since this triggers if the balls are ever inside eachother and not moving relatively, you might want to move them outside eachother just as a safety, even if that should never happen if you spawn the balls correctly.
+				return;
+			//}			<-- If statement can be commented out because a is never 0 without b being 0. Having this branch creates problems because b might not be exactly zero because rounding error and then you don't do what you're supposed to do even though you should.
+		}
 
 		b /= a;
 		c /= a;
 
-		float r = b * b / 4 - c;
-		if (r < 0) {		// Parallel lines, deoesn't work.
+		double r = b * b / 4 - c;
+		if (r < 0) {		// I assume this happens when parallel lines are too far away from eachother to produce a hit.
 			
 		}
-		else if (r == 0) {	// This shouldn't ever happen, don't know what it would mean.
-			DebugBreak;
-		}
-		else {				// Two solutions.
+		else if (r > 0 || r == 0) {					// More than one solution happens all the time. One solution happens when parallel lines are exactly r1 + r2 away from eachother and just one point is hittable.
+
+			if (collisionFlag) { pos += vel; other.pos += other.vel; return; }
+
+			if (r < 0) { DebugBreak(); }
 			r = sqrt(r);
 			b = -b / 2;
-			float x1 = b + r;
-			float x2 = b - r;
-			if ((x1 > 1 || x1 < 0) && (x2 > 1 || x2 < 0)) {			// Both solutions are out of bounds of the current contex, no collision.
+			double x1 = b + r;
+			double x2 = b - r;
+			if ((x1 > 1 || x1 <= 0) && (x2 > 1 || x2 <= 0)) {			// Both solutions are out of bounds of the current contex, no collision.
 				pos += vel;
 				other.pos += other.vel;
 				return;
@@ -167,19 +179,19 @@ public:
 				actualX = x2;
 			}
 
-			if (x1 > 1 || x1 < 0) { actualX = x2; }
-			else if (x2 > 1 || x2 < 0) { actualX = x1; }
+			if (x1 > 1 || x1 <= 0) { actualX = x2; }
+			else if (x2 > 1 || x2 <= 0) { actualX = x1; }
 
 			pos += vel * actualX;
 			other.pos += other.vel * actualX;
 
 
 			Vector2f normal = (other.pos - pos).normalize();
-			other.pos += normal * 0.1f;
-			pos -= normal * 0.1f;
 			Vector2f relV = ((vel * normal) * normal) - ((other.vel * normal) * normal);
 			other.vel += relV;
 			vel -= relV;
+
+			collisionFlag = true;
 
 
 			debuglogger::out << "collision detected!" << debuglogger::endl;
@@ -193,7 +205,7 @@ public:
 };
 
 Particle a(Vector2f(200, 200), Vector2f(1, 1));
-Particle b(Vector2f(400, 400), Vector2f(-1, -1));
+Particle b(Vector2f(400, 300), Vector2f(-1, -1));
 
 void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we don't have to do this boilerplate every time. Good idea or no?
 

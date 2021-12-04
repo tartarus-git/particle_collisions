@@ -14,6 +14,7 @@ public:
 
 	float operator%(const Vector2f& other) const noexcept;
 
+	// Reflect vector across normal. Vector must be pointing towards surface for correct result.
 	Vector2f reflect(const Vector2f& normal) const noexcept;
 
 	Vector2f operator+(const Vector2f& other) const noexcept;

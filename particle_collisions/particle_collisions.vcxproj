@@ -148,10 +148,16 @@
     <ClCompile Include="debugOutput.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="OpenCLBindingsAndHelpers.cpp" />
+    <ClCompile Include="Particle.cpp" />
+    <ClCompile Include="Scene.cpp" />
+    <ClCompile Include="Vector2f.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="debugOutput.h" />
     <ClInclude Include="OpenCLBindingsAndHelpers.h" />
+    <ClInclude Include="Particle.h" />
+    <ClInclude Include="Scene.h" />
+    <ClInclude Include="Vector2f.h" />
     <ClInclude Include="windowSetup.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

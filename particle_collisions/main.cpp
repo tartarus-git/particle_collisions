@@ -1,8 +1,6 @@
-#define PARTICLE_RADIUS 50
-
 #define WINDOW_TITLE "Particle Collisions"
-
 #define WINDOW_CLASS_NAME "particle_collisions_sim_window"
+
 #include "windowSetup.h"
 
 #include "debugOutput.h"
@@ -34,20 +32,13 @@ LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-class Vector2f {
+class Vector22f {
 public:
 	float x;
 	float y;
 
 	Vector2f() = default;
 	Vector2f(float x, float y) : x(x), y(y) { }
-
-	/*Vector2f& operator+(Vector2f& other) {				// Reference is ok in all situations in this case because we don't change the value, which allows the compiler to avoid using pointers if the function can't be inlined.
-		Vector2f result;
-		result.x = x + other.x;
-		result.y = y + other.y;
-		return result;
-	}*/
 
 	float calcLength() {
 		return sqrt(x * x + y * y);
@@ -104,9 +95,7 @@ public:
 
 HDC g;
 
-bool collisionFlag = false;
-
-class Particle {
+class Particl2e {
 public:
 	Vector2f pos;
 	Vector2f vel;
@@ -226,13 +215,7 @@ public:
 	}
 };
 
-Particle a(Vector2f(200, 200), Vector2f(1, 1));
-Particle b(Vector2f(400, 300), Vector2f(-1, -1));
-
 void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we don't have to do this boilerplate every time. Good idea or no?
-
-	a.vel *= 0.4f;
-	b.vel *= 0.4f;
 
 	HDC finalG = GetDC(hWnd);
 	g = CreateCompatibleDC(finalG);

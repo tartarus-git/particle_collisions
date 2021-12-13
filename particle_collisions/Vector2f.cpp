@@ -25,7 +25,7 @@ Vector2f& Vector2f::operator-=(const Vector2f& other) noexcept { x -= other.x; y
 
 Vector2f Vector2f::operator*(float factor) const noexcept { return Vector2f(x * factor, y * factor); }
 
-Vector2f operator*(float factor, Vector2f vector) noexcept { return vector * factor; }
+Vector2f operator*(float factor, const Vector2f& vector) noexcept { return vector * factor; }
 
 Vector2f& Vector2f::operator*=(float factor) noexcept { x *= factor; y *= factor; return *this; }
 

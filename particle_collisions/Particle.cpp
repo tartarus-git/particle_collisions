@@ -1,3 +1,3 @@
 #include "Particle.h"
 
-void Particle::update() { pos += vel; }
+void Particle::update() noexcept { pos += vel; }

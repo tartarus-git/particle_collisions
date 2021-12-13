@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Particle.h"
+#include "Vector2f.h"
 #include <vector>
 
 class Scene
@@ -10,7 +11,9 @@ public:
 	size_t particleCount;
 	size_t lastParticle;
 	std::vector<size_t> lastParticleCollisions;
-	std::vector<Vector2f> remainingVels;
+	float prevStepProgress = 1;			// This needs to be 1, don't think that this number is irrelevant.
+	float stepProgress = 1;
+	bool finished = true;
 
 	Scene() = default;
 

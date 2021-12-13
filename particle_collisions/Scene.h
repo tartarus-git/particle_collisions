@@ -8,13 +8,13 @@ class Scene
 public:
 	std::vector<Particle> particles;
 	size_t particleCount;
-	size_t lastParticle;		// TODO: Make the constructors initialize this one.
-	std::vector<size_t> lastParticleCollisions;		// TODO: Make the constructors make this.
-	std::vector<float> earliestCollisions;
+	size_t lastParticle;
+	std::vector<size_t> lastParticleCollisions;
+	std::vector<Vector2f> remainingVels;
 
 	Scene() = default;
 
-	void setupHelperVectors();
+	void setupParticleHelpers();
 
 	Scene(std::vector<Particle> particles, size_t count);
 	Scene(std::vector<Particle> particles);
@@ -28,6 +28,7 @@ public:
 	}
 
 	void findCollision(size_t aIndex, size_t bIndex);
+	void findSubCollisions(size_t aIndex, size_t bIndex);
 	void resolveCollisions();
 	void step();
 };

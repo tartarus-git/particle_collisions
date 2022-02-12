@@ -33,9 +33,9 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 	Particle& alphaRef = particles[aIndex];
 	Particle& betaRef = particles[bIndex];
 	Particle alpha = alphaRef;			// TODO: See if you should do this or not. Potentially compare assembly. Ask on stackoverflow as well maybe.
-	alpha.vel *= prevStepProgress;			// TODO: This is a quick fix, doesn't look good.
+	alpha.vel *= 1 - stepProgress;			// TODO: This is a quick fix, doesn't look good.
 	Particle beta = betaRef;
-	beta.vel *= prevStepProgress;
+	beta.vel *= 1 - stepProgress;
 
 	Vector2f posDiff = alpha.pos - beta.pos;
 	float minDist = alpha.radius + beta.radius;
@@ -88,7 +88,7 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 	} else if (t2 > 1 || t2 <= 0) { actualT = t1; }					// x1 is the correct solution.
 	else { if (t1 < t2) { actualT = t1; } else { actualT = t2; } }	// The lower of the two solutions if the correct solution. This is because the collision that happens the earliest is the real one.
 	
-	if (actualT < stepProgress) { stepProgress = actualT; }
+	if (actualT < stepProgress) { stepProgress += (1 - stepProgress) * actualT; }
 	finished = false;				// Make sure everybody knows that this substep still had a collision in it. TODO: See if you can somehow do something smart with stepProgress to signal the same thing without needing to set a bool every time here.
 
 			/*Vector2f normal = (other.pos - pos).normalize();
@@ -109,7 +109,7 @@ void Scene::resolveCollisions() {
 		Particle& particle = particles[i];
 		particle.pos += particle.vel * stepProgress;
 		if (lastParticleCollisions[i] == i) { continue; }			// If nothing to collide with for this particle or if this particle's collision is recorded in another particles lastParticleCollision, do nothing.
-		Particle& other = particles[lastParticleCollisions[i]];
+		Particle& other = particles[lastParticleCollisions[i]];				// TODO: You gotta move the other particle in this function as well or else this ain't gonna work.
 		Vector2f normal = (other.pos - particle.pos).normalize();
 		Vector2f relV = ((particle.vel % normal) * normal) - ((other.vel % normal) * normal);
 		particle.vel -= relV;
@@ -129,8 +129,6 @@ void Scene::step() {
 		finished = true;			// Setup for next round. TODO: You should stop setting this in class global and always set it above first for loop.
 
 		resolveCollisions();
-		prevStepProgress = stepProgress;
-		stepProgress = 1;
 	}
 	stepProgress = 1;			// Setup for next step progress.
 	prevStepProgress = 1;

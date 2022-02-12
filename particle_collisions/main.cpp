@@ -13,9 +13,6 @@
 
 #include "Renderer.h"
 
-#define PARTICLE_MIN_DIST (PARTICLE_RADIUS * 2)
-#define SQUARE_PARTICLE_MIN_DIST (PARTICLE_MIN_DIST * PARTICLE_MIN_DIST)
-
 unsigned int windowWidth;
 unsigned int windowHeight;
 

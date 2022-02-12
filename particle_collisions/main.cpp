@@ -51,8 +51,8 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 	HBRUSH bgBrush = CreateSolidBrush(RGB(0, 0, 0));
 
 	std::vector<Particle> particles;
-	for (int i = 0; i < 20; i++) {
-		particles.push_back(Particle(Vector2f(rand() % windowWidth, rand() % windowHeight), Vector2f(1, 1), 20, 1));
+	for (int i = 0; i < 2; i++) {
+		particles.push_back(Particle(Vector2f(rand() % windowWidth, rand() % windowHeight), Vector2f(0, 0), 20, 1));
 	}
 	Scene scene(particles);
 
@@ -66,6 +66,6 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 		SelectObject(g, particleBrush);
 		renderer.render(scene);
 		BitBlt(finalG, 0, 0, windowWidth, windowHeight, g, 0, 0, SRCCOPY);
-		scene.step();
+		//scene.step();
 	}
 }

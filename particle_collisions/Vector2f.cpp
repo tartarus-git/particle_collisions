@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-bool Vector2f::isZero() const noexcept { return !(x || y); }
+bool Vector2f::isZero() const noexcept { return !(x || y); }				// TODO: This vector class would be a perfect place to use a whole lot of SIMD instructions, see about doing that.
 
 float Vector2f::sum() const noexcept { return x + y; }
 

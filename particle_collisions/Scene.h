@@ -7,13 +7,19 @@
 class Scene
 {
 public:
+	size_t collisionA;
+	size_t collisionB;
+
 	std::vector<Particle> particles;
 	size_t particleCount;
 	size_t lastParticle;
 	std::vector<size_t> lastParticleCollisions;
-	float prevStepProgress = 1;			// This needs to be 1, don't think that this number is irrelevant.
+	std::vector<size_t> currentParticleCollisions;
 	float stepProgress = 1;
 	bool finished = true;
+
+	unsigned int width;
+	unsigned int height;
 
 	Scene() = default;
 
@@ -31,7 +37,7 @@ public:
 	}
 
 	void findCollision(size_t aIndex, size_t bIndex);
-	void findSubCollisions(size_t aIndex, size_t bIndex);
+	void findWallCollisions(size_t index);
 	void resolveCollisions();
 	void step();
 };

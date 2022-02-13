@@ -48,7 +48,7 @@
 // What is thread local? Thread local variables are basically like global variables, but they don't get carried across threads (threads have different stacks, but everything else, including .data segment, where the global variables reside, is shared between them (obviously tdata and tbss are not shared, thats the whole point)).
 //				So global variables can be changed from all currently active threads of a process, but thread local variables (you can create them with the thread_local attribute on global variables), are copied for each thread so that each thread has it's own copy of the variables.
 //				The copying is done by the runtime, but I'm very much not an expert on that, still confused about how exactly that gets accomplished.
-// ANOTHER SUPER IMPORTANT THING: When a new thread is created, like I've already said, it gets a new stack, but it has the same virtual address space as the other threads, which is due to the requirement of needing to be able to share pointers and access each others heap and stack memory, which is possible and really cool.
+// ANOTHER SUPER IMPORTANT THING: When a new thread is created, like I've already said, it gets a new stack, but it has the same virtual address space as the other threads, which is due to the requirement of needing to be able to share pointers and access the same data (think global vars stored in .data (and other data including each other's .tbss and .tdata data and each other's stacks, which is really cool)).
 //		The problem with that is that the stacks are in the same address space, so they create limits for each other (the stack is already limited by the maximum addressable size of virtual memory, which is determined by the bitwidth of the machine (32 or 64-bit machines), and also by the memory layout in virtual memory.
 //		it definitely can't expand forever, take a look at a typical memory layout for a process and then you'll understand better. I think a stack can have a max size of 80MB in most systems or something, but thats the 32-bit version so idk how it is on 64-bit machines.)
 //		Creating threads adds more stacks, which (at least on 32-bit systems), presumably causes some memory issues. It seems probable that the maximum stack size goes down when you allocate new thread stack storage and such, which is super interesting, but shouldn't ever be a problem since heavy duty allocations should be
@@ -110,10 +110,15 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 	HBRUSH bgBrush = CreateSolidBrush(RGB(0, 0, 0));
 
 	std::vector<Particle> particles;
-	for (int i = 0; i < 2; i++) {
-		particles.push_back(Particle(Vector2f(rand() % windowWidth, rand() % windowHeight), Vector2f(1, 0), 20, 1));
+	for (int i = 0; i < 20; i++) {
+		particles.push_back(Particle(Vector2f(rand() % windowWidth, rand() % windowHeight), Vector2f(0.1f, 0), 20, 1));
 	}
+	//particles.push_back(Particle(Vector2f(100, 100), Vector2f(0.1f, 0), 20, 1));
+	//particles.push_back(Particle(Vector2f(200, 100), Vector2f(-0.1f, 0), 20, 1));
+	//particles.push_back(Particle(Vector2f(150, 150), Vector2f(0, -0.1f), 20, 1));
 	Scene scene(particles);
+	scene.width = windowWidth;
+	scene.height = windowHeight;
 
 	Renderer renderer(g);
 

@@ -2,143 +2,165 @@
 
 #include "debugOutput.h"
 
-void Scene::setupParticleHelpers() {
+void Scene::loadSize(unsigned int width, unsigned int height) { this->width = width; this->height = height; }
+
+void Scene::loadParticles(const std::vector<Particle>& particles, size_t count) { this->particles = particles; particleCount = count; lastParticle = count - 1; }
+void Scene::loadParticles(const std::vector<Particle>& particles) { this->particles = particles; particleCount = particles.size(); lastParticle = particleCount - 1; }
+void Scene::loadParticles(std::vector<Particle>&& particles, size_t count) { this->particles = std::move(particles); particleCount = count; lastParticle = count - 1; }
+void Scene::loadParticles(std::vector<Particle>&& particles) { particleCount = particles.size(); lastParticle = particleCount - 1; this->particles = std::move(particles); }				// Order is reversed here in case the moving of one vector into another changes the size() member function return value in the temporary.
+
+void Scene::init() {
 	lastParticleCollisions.resize(particleCount);
-	currentParticleCollisions.resize(particleCount);
 	for (int i = 0; i < particleCount; i++) {
 		lastParticleCollisions[i] = i;					// Last collision for every particle is itself. Signals that no last collision exists yet.
-		currentParticleCollisions[i] = i;
 	}
 }
 
-Scene::Scene(std::vector<Particle> particles, size_t count) : particles(particles), particleCount(count), lastParticle(count - 1) {
-	setupParticleHelpers();
-}			// TODO: You should probably swap the ones with count with the ones without count because thats the order prioritywise they would be in right?
+void Scene::findWallCollision(size_t index) {
+	Particle& particle = particles[index];
 
-Scene::Scene(std::vector<Particle> particles) : particles(particles), particleCount(particles.size()), lastParticle(particleCount - 1) {
-	setupParticleHelpers();
+	// NOTE: If a particle is outside the bounds of the scene, the position is corrected and the particle is reflected (much like the particle intersection safeguard at the beginning of findCollision function).
+	// One could do some things (which would be efficient and would technically make the program more efficient) in the case of an out of bounds particle, that would cause the control flow to skip the evaluation of most of the rest of the particle pairs.
+	// (The same optimization could be applied to the particle intersection guard code in the findCollision function.)
+	// While this would make the program run faster, it would only do so on the very rare occasion that a particle actually goes out of bounds (the algorithm protects against that). Theres no overhead in implementing the optimization, so one would think that we should do it, but its harmful in one specific situation:
+	// If not only one particle goes out of bounds, but a bunch of particles do and a bunch of other particles suddenly start intersecting with each other (idk why this would happen, but if something crazy goes wrong), it would take way more substeps to correct this situation than if we were to not implement the aforementioned
+	// optimzation. This is super super super unlikely, but if it does happen, I think it's more important to recover from that situation quickly than to recover from single particles outside of bounds quickly. The reason I think this is because recovering from single particle issues is already super quick, even without the
+	// optimzation. By putting in the optimization, we would be sacrificing a hugely better recovery time for one thing for a marginally better recovery time on another thing.
+	// BTW, the optimization would be to pass index by reference (this function is very likely to be inlined, so reference would (I assume) be free) and then set it equal to lastParticle - 1 when we detect an out of bounds particle. This would skip a bunch of technically unnecessary calculation, but like I said,
+	// we're going to do the unnecessary calculations because that causes the intersection guard in findCollisions to be hit and this out of bounds guard to be hit for all the particles, which causes way more errors to be corrected in one substep.
+	// BTW, the calculations are unnecessary because once we set lowestT to 0 here, no other calculation will change the value again, they do nothing for us, hence, useless (like I said, theoretically).
+	// TODO: Could we just do the optimization but then start a loop in this function to go through everything and just check the guards? That would be the best of both worlds and be super efficient.
+
+	if (particle.pos.x < particle.radius) {
+		particle.pos.x = particle.radius;
+		// TODO: When we get a hit in one of these buckets, do the following: go through all the upcoming particles from inside this function and make sure all of their intersection guard code gets a chance to run. Then, set the i and j member variables to a state that almost resembles the start of the main while loop
+		// (your not gonna be able to get the main while loop start simulated perfectly, but you'll get close), then set lowestT to 1 and noCollisions to true, then do the first particles calculations (wall hits and stuff, because the for loop isn't going to reach that even with i and j set to 0).
+		// What this does is this: with no overhead, you've created a situation where, after returning from this function, it'll be as if the next substep has started, which it essentially has. This will forego a bunch of unnecessary processing of all sorts of stuff (unnecessary because of intersection and because lowestT is 0
+		// when an intersection happens), but most importantly, it'll forgo calling the reflectCollision function, which means you won't have to do any branching to find out whether there are particles you need to reflect or not.
+		// Just as a reminder, the plan is also the do the reflections directly in this function when the need arises (only when doing out of bounds intersection resolution), and also in the intersection guard in the findCollision function.
+		// This will allow all of the intersections of the substep to be resolved and reflected without having to start new substeps in between because the collision reflector has to run. The collision reflector does one pair at a time, which we don't have to abide by if we forego it in these specific circumstances.
+	}
+	else { unsigned int xBoundary = width - particle.radius; if (particle.pos.x > xBoundary) { particle.pos.x = xBoundary; } }
+	// NOTE: You might consider caching width - particle.radius for every particle to make the above faster, but indexing into the resulting array would be less efficient than the current setup (because the array would be in heap), don't do it.
+	if (particle.pos.y < particle.radius) { particle.pos.y = particle.radius; }
+	else { unsigned int yBoundary = height - particle.radius; if (particle.pos.y > yBoundary) { particle.pos.y = yBoundary; } }
 }
-
-Scene::Scene(std::vector<Particle>&& particles, size_t count) : particles(std::move(particles)), particleCount(count), lastParticle(count - 1) {
-	setupParticleHelpers();
-}
-
-Scene::Scene(std::vector<Particle>&& particles) : particles(std::move(particles)), particleCount(this->particles.size()), lastParticle(particleCount - 1) {
-	setupParticleHelpers();
-}
-
-float lowestT;
 
 void Scene::findCollision(size_t aIndex, size_t bIndex) {
+	Particle& alpha = particles[aIndex];
+	Particle& beta = particles[bIndex];
+
+	// If the two particles are inside each other (which shouldn't ever happen unless they are spawned wrong or their positions are changed from outside of the simulation), move them outside of each other using the shortest possible path.
+	float minDist = alpha.radius + beta.radius;				// TODO: This should be moved to the top, two particles can still intersect even though they just hit each other if some weird outside forces are applied, this safety feature needs to be at the top.
+	Vector2f toAlphaFromBeta = alpha.pos - beta.pos;
+	float distance = toAlphaFromBeta.getLength();
+	/*if (distance < minDist) {						// TODO: See about getting not only one of these intersections reflected per run. Maybe store currentColliders in a two vectors so that you can massively reflect stuff when this happens. But the overhead probably isn't worth it, think through it a couple times.
+		float adjustment = minDist - distance;						// TODO: Instead of doing that, just reflect the particles directly in this code block, that would be an awesome solution, somehow, your going to need to be able to tell the reflector to do nothing though. Too much overhead?
+		toAlphaFromBeta *= adjustment / distance;
+		alpha.pos += toAlphaFromBeta;
+		beta.pos -= toAlphaFromBeta;
+		lowestT = 0;															// If we resolve the collision without marking it as a collision, the two particles might go into each other again on the next frame. We need the reflection code to reflect the particles off of one another so they move in different directions.
+		currentColliderA = aIndex;												// NOTE: Technically, if the velocities are the same, there is no reflection to be done, but spending an if statement on something that probably isn't going to happen often at all is inefficient.
+		currentColliderB = bIndex;		// NOTE: Marking this as collision is also super important because if we didn't, and beta (for example) was already marked as current collider this round, the coming collision would be totally off because we move beta here. We HAVE to mark this as collision to avoid that situation.
+		noCollisions = false;			// Since we move both particles in this intersection resolution code, even if the resolution moves one particle into another intersection situation, the system should naturally resolve everything over the course of the next few rounds (NOT frames). That is beautiful.
+		return;
+	}*/
+
 	// If last collision was with the same object, it is physically impossible for this collision to be with same object.
 	// The main reason this is here is for protection against floating point rounding error:
-	// If collision is tested with a particle that is now touching (thanks to collision resolution), due to rounding errors, that object will probably count as a collision.
+	// If collision is tested with a particle that is now touching (thanks to the previous collision being resolved), due to rounding errors, that object will probably count as a collision.
 	// To avoid this, just don't check collisions with that object until this object has collided off of something else and the question can be asked again.
 	if (lastParticleCollisions[aIndex] == bIndex) { return; }
 
-	Particle& alphaRef = particles[aIndex];
-	Particle& betaRef = particles[bIndex];
-	Particle alpha = alphaRef;			// TODO: See if you should do this or not. Potentially compare assembly. Ask on stackoverflow as well maybe.
-	alpha.vel *= stepProgress;			// TODO: This is a quick fix, doesn't look good.
-	Particle beta = betaRef;
-	beta.vel *= stepProgress;
 
-	Vector2f posDiff = alpha.pos - beta.pos;
-	float minDist = alpha.radius + beta.radius;
-	float squareMinDist = minDist * minDist;
-	Vector2f specialVelDiff = alpha.vel - 2 * beta.vel;
-	// a and b will equal zero if particles have same velocity and either aren't colliding or are colliding (the latter should theoretically never happen unless the particles get spawned wrong).
-	//if (alpha.vel == beta.vel) {			// TODO: This system of doing it is stupid. Also super important: floating point error could creep in between this failing and setting a, which could mean a still becomes 0. Find a way to avoid that.
-		float length = posDiff.getLength();
-		float dist = length - minDist;
-		if (dist < 0) {								// If they ARE somehow inside each other, fix the collision straight away since there is nothing to simulate back to.
-			posDiff *= dist / length;
-			betaRef.pos += posDiff;
-			alphaRef.pos -= posDiff;
-			return;
-		}
-	//}
+	Vector2f remainingAlphaVel = alpha.vel * currentSubStep;						// Calculate the collision possiblities using the remaining amount of the velocity that has yet to be travelled in the frame. This is necessary for our stepped approach to resolving massive amounts of collisions.
+	Vector2f remainingBetaVel = beta.vel * currentSubStep;
+
+	// Construct coefficients necessary for solving the quadratic equation the describes particle collisions.
 
 	// a coefficient
-	float a = (alpha.vel - beta.vel) % (alpha.vel - beta.vel);
-	if (a == 0) {
-		return;
+	Vector2f velDiff = remainingAlphaVel - remainingBetaVel;
+	float a = velDiff % velDiff;
+	if (a == 0) { return; }							// This means that the velocities of the two particles are exactly the same, which means they can't be colliding, they could only theoretically be inside of each other, which we solve in the above code, so we just need to exit here.
+	// Leaving this if statement out also makes it possible for the following code to divide by zero, which has bad results for the simulation, so we need to nip that possiblity in the bud as well.
+
+	// b coefficient (additionally, I've divided by 2a from the get-go so that it fits nicely into a more efficient version of the quadratic equation)
+	// NOTE: After reading this, you might think that I've forgotten to divide by 2, but I did it by removing a multiplication that was supposed to be there, so everythings fine, don't worry.
+	float b = (velDiff % toAlphaFromBeta) / a;
+
+	// c coefficient (I've divided this one by a from the get-go as well for the same reason)
+	float c = ((toAlphaFromBeta % toAlphaFromBeta) - minDist * minDist) / a;							// TODO: Try combining b with c here and seeing if the amount of operations is lower. You still have to keep a raw b around for later though, so it probably won't be efficient in the grand scheme of things to combine b and c here, but do the math and check. You might be able to avoid a division, but probably not.
+	// TODO: C isn't used anywhere except r, so when combining b and c, you can combine them directly into r and save a variable.
+
+	// Constructing the determinant.
+	float r = b * b - c;
+
+	// If no collisions (because trajectories are parallel and too far away from each other for a parallel (head on) collision), return.
+	if (r < 0) { return; }
+
+	// The following path gets taken if 1 possible collision (parallel lines that are exactly the right distance away), or 2 possible collisions (all other non-handled collisions).
+	// It's inefficient to have separate branch for 1 collision because it happens so rarely, we just handle it through the math of 2 collision handler.
+
+	// NOTE: Before we move on, I'm going to explain exactly what these two different collision possiblities represent:
+	// We're defining a collision as the moment in time where two particles just barely touch (their distance is equal to their summed radii). This happens if they collide, but also if they were to move through each other and touch each others backs just before leaving each others influence.
+	// These points are both on the particle's trajectories and the formula picks up both of them. The following code filters out the "collision" that happens the latest, because that one has to be the invalid one (because you have to go into each other before you can go back out).
+
+	r = sqrt(r);											// Now that we know that the determinant is non-negative, it's safe to do the square root.
+
+	b = -b;													// Construct the final p term, we didn't do this when we originally created it (even though it is theoretically possible and also clean) because there is no need to do extra calculation when we might quit because of r < 0 anyway. Now that we definitely didn't quit, it's ok.
+
+	float t1 = b + r;										// Calculate both possible collisions.
+	float t2 = b - r;
+
+	// Now to find the collision among the two posibilities.
+	// NOTE: Both possibilities can also be wrong. The reason is because the formula detects collisions along our infinitely long trajectories, but only if the collisions happen in the next frame do they matter to us.
+	// TODO: This actually presents an opportunity for a massive optimization. We can find the lowest t-value, but we can still count it even if it is super high (for example 200). Then we initialize a counter at 200 and for the next 200 frames, we know that no particle in the simulation will collide with anything.
+	// This presents a problem in case the simulation changes somehow while we're doing our "cached frames", like if after 100 frames, a particle appears out of no where, we'are not going to be able to collide with it.
+	// To fix this issue, have some sort of clear cache function that any other code will have to call if it changes the simulation on a wim. This will set our counter to 0 or something, and will tell the scene code that it does need to start calculating the physics properly again.
+	// This could improve the performance by so so so so so much when the particles aren't currently colliding with each other. Even if it's just active for a couple of frames at a time, this could make the simulation so much faster.
+
+	// NOTE: According to the IEEE standard, which pretty much all popular C++ compilers stick to AFAIK, float comparisons between a NaN and something else (even if that something else is also a NaN) always equate to false. This means that f != f returns true when f = NaN.
+	// This cannot be relied on if you're planning on having your code work even when compiled using the -ffast-math flag. This flag strays from the IEEE standard to allow some optimizations to work, causing stuff f != f to be unreliable.
+	// To be compatible with -ffast-math, one should probably just avoid NaN alltogether, which is what we're doing in this class by checking if a == 0 before moving on (see above). (In case you don't understand: dividing by 0 causes NaN, which we thereby avoid)
+	// Another way to check for NaN is to check the bit pattern of the float at hand, which should work with -ffast-math in most cases, but if -ffast-math somehow changes the bit pattern for certain floats (because it doesn't have to stick to IEEE), then this is unreliable as well.
+
+	float actualT;
+	if (t1 >= 0 && t1 < lowestT) {
+		if (t2 >= 0 && t2 < lowestT) { lowestT = t1 < t2 ? t1 : t2; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
+		lowestT = t1; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return;
 	}
-
-	// b coefficient
-	float b = ((alpha.vel - beta.vel) % (alpha.pos - beta.pos)) * 2;
-
-	// c coefficient
-	float c = (alpha.pos % alpha.pos) + (beta.pos % beta.pos) - (2 * (alpha.pos % beta.pos)) - (alpha.radius + beta.radius) * (alpha.radius + beta.radius);
-
-	// Construct determinant.
-	float r = b * b - 4 * a * c;
-
-	// If no collisions (because parallel trajectories that are too far away from each other for a parallel collision), return.
-	// We don't put 1 into earliestCollisions list here because the default value in earliestCollisions is 1. We don't have to do anything.
-	if (r < 0) {
-		return; }
-
-	// Following gets triggered if 1 collision (parallel lines that are exactly the right distance away), or 2 collisions (all other non-handled collisions).
-	// Inefficient to have separate branch for 1 collision because it happens so rarely, just handle it through the math of 2 collision handler.
-	r = sqrt(r);
-	b = -b;					// Construct full p term.
-	float t1 = (b + r) / (2 * a);		// Calculate both possible collisions.
-	float t2 = (b - r) / (2 * a);
-	float actualT;			// Find the actual collision.
-	if (t1 > 1 || t1 < 0) {				// TODO: How does nan compare with normal numbers? Does it always return a false comparison?
-		if (t2 > 1 || t2 < 0) {
-			return; }							// Both solutions are out of bounds. No collision.
-		actualT = t2;												// x2 is the correct solution.
-	} else if (t2 > 1 || t2 < 0) { actualT = t1; }					// x1 is the correct solution.
-	else { if (t1 < t2) { actualT = t1; } else { actualT = t2; } }	// The lower of the two solutions if the correct solution. This is because the collision that happens the earliest is the real one.
-	
-	if (actualT <= lowestT) { lowestT = actualT;
-	collisionA = aIndex;
-	collisionB = bIndex;
-	}
-	finished = false;				// Make sure everybody knows that this substep still had a collision in it. TODO: See if you can somehow do something smart with stepProgress to signal the same thing without needing to set a bool every time here.
-	return;
+	if (t2 >= 0 && t2 < lowestT) { actualT = t2; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
 }
 
-void Scene::findWallCollisions(size_t i) {
-	const Particle& a = particles[i];
-	if ((a.pos + a.vel).x > width - a.radius || (a.pos + a.vel).x < 0 + a.radius) {
-		
-	}
-}
-
-void Scene::resolveCollisions() {
-		Particle& particle = particles[collisionA];
-		Particle& other = particles[collisionB];
-		Vector2f normal = (other.pos - particle.pos).normalize();
-		Vector2f relV = ((particle.vel % normal) * normal) - ((other.vel % normal) * normal);
-		particle.vel -= relV;
-		other.vel += relV;
+void Scene::reflectCollision() {
+		Particle& alpha = particles[currentColliderA];
+		Particle& beta = particles[currentColliderB];
+		Vector2f normal = (beta.pos - alpha.pos).normalize();
+		Vector2f relV = ((alpha.vel % normal) * normal) - ((beta.vel % normal) * normal);
+		alpha.vel -= relV;
+		beta.vel += relV;
 
 			//if (particle.pos.y > height - particle.radius || particle.pos.y < 0 + particle.radius) { particle.vel.y = -particle.vel.y; }
 			//if (particle.pos.x > width - particle.radius || particle.pos.x < 0 + particle.radius) { particle.vel.x = -particle.vel.x; }				// This should probably reset last particle collided metric because physics now allows it to hit the same ball again. TODO.
 }
 
 void Scene::step() {
-	stepProgress = 1;
+	currentSubStep = 1;
 	while (true) {
 		lowestT = 1;
-		finished = true;			// Setup for next round. TODO: You should stop setting this in class global and always set it above first for loop.
-		// Find the earliest safepoint of all the particles.
+		noCollisions = true;
 		for (int i = 0; i < lastParticle; i++) {
+			findWallCollision(i);
 			for (int j = i + 1; j < particleCount; j++) {				// TODO: For loop does first iteration before checking right? If it doesn't that is unnecessary work here.
-				findCollision(i, j);
+				findCollision(i, j);									// NOTE: If a weird intersection happens, then lowestT might be zero before we get to the end of these loops. We could do an if statement to exit prematurely in that case, but the chances of it happening are too low. It would be inefficient.
 			}
 		}
-		if (finished) { break; }
-		lastParticleCollisions[collisionA] = collisionB;
-		lastParticleCollisions[collisionB] = collisionA;
-		stepProgress *= lowestT;
+		if (noCollisions) { break; }
+		float subStepProgress = currentSubStep * lowestT;						// Store the fraction of the current substep that every particle can now safely put behind itself.
 
 		for (int i = 0; i < particleCount; i++) {
 			Particle& particle = particles[i];
-			particle.pos += particle.vel * stepProgress;
+			particle.pos += particle.vel * subStepProgress;
 			if (particle.pos.x > width - particle.radius || particle.pos.x < 0 + particle.radius) {
 			lastParticleCollisions[i] = i;
 				particle.vel.x = -particle.vel.x; }
@@ -146,11 +168,14 @@ void Scene::step() {
 			lastParticleCollisions[i] = i;
 				particle.vel.y = -particle.vel.y; }
 		}
-		resolveCollisions();
-		stepProgress = 1 - stepProgress;
+		reflectCollision();
+
+		lastParticleCollisions[currentColliderB] = currentColliderA;
+		lastParticleCollisions[currentColliderA] = currentColliderB;
+		currentSubStep -= subStepProgress;										// Set the next substep to be equal to the fraction of the current substep that we haven't traversed yet.
 	}
 	for (int i = 0; i < particleCount; i++) {
-		particles[i].pos += particles[i].vel * stepProgress;
+		particles[i].pos += particles[i].vel * currentSubStep;
 		Particle& particle = particles[i];
 			if (particle.pos.x > width - particle.radius || particle.pos.x < 0 + particle.radius) {
 			lastParticleCollisions[i] = i;

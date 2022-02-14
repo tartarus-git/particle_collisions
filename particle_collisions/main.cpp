@@ -110,15 +110,16 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 	HBRUSH bgBrush = CreateSolidBrush(RGB(0, 0, 0));
 
 	std::vector<Particle> particles;
-	for (int i = 0; i < 20; i++) {
-		particles.push_back(Particle(Vector2f(rand() % windowWidth, rand() % windowHeight), Vector2f(0.1f, 0), 20, 1));
+	for (int i = 0; i < 60; i++) {
+		particles.push_back(Particle(Vector2f(windowWidth / 62 * (i + 1), rand() % windowHeight), Vector2f(0.1f, 0), 7, 1));
 	}
 	//particles.push_back(Particle(Vector2f(100, 100), Vector2f(0.1f, 0), 20, 1));
 	//particles.push_back(Particle(Vector2f(200, 100), Vector2f(-0.1f, 0), 20, 1));
 	//particles.push_back(Particle(Vector2f(150, 150), Vector2f(0, -0.1f), 20, 1));
-	Scene scene(particles);
-	scene.width = windowWidth;
-	scene.height = windowHeight;
+	Scene scene;
+	scene.loadParticles(particles);
+	scene.init();
+	scene.loadSize(windowWidth, windowHeight);
 
 	Renderer renderer(g);
 

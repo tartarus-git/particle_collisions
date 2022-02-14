@@ -7,37 +7,32 @@
 class Scene
 {
 public:
-	size_t collisionA;
-	size_t collisionB;
-
-	std::vector<Particle> particles;
-	size_t particleCount;
-	size_t lastParticle;
-	std::vector<size_t> lastParticleCollisions;
-	std::vector<size_t> currentParticleCollisions;
-	float stepProgress = 1;
-	bool finished = true;
-
 	unsigned int width;
 	unsigned int height;
 
-	Scene() = default;
+	std::vector<Particle> particles;									// TODO: Write a destructor that handles releasing these even though they do it themselves anyway.
+	std::vector<size_t> lastParticleCollisions;
+	size_t particleCount;
+	size_t lastParticle;
 
-	void setupParticleHelpers();
+	size_t currentColliderA;						// TODO: These shouldn't be in here since they are just temporarys that don't get used outside of their steps. Making them global would cause issues with multithreading, but making them thread_local would be the best of both worlds. Do that.
+	size_t currentColliderB;
 
-	Scene(std::vector<Particle> particles, size_t count);
-	Scene(std::vector<Particle> particles);
-	Scene(std::vector<Particle>&& particles, size_t count);
-	Scene(std::vector<Particle>&& particles);
-	// TODO: Are there any other cases I should consider?
+	float currentSubStep;						// TODO: This one can also be made thread_local.
+	float lowestT;								// TODO: This one too.
+	bool noCollisions;							// TODO: Same thing.
 
+	void loadSize(unsigned int width, unsigned int height);
 
-	void swap(std::vector<Particle> particles) {			// TODO: This method name could be better.
-		this->particles.swap(particles);		// TODO: Make sure this is the best way to implement this. Also move to cpp file.
-	}
+	void loadParticles(const std::vector<Particle>& particles, size_t count);
+	void loadParticles(const std::vector<Particle>& particles);
+	void loadParticles(std::vector<Particle>&& particles, size_t count);
+	void loadParticles(std::vector<Particle>&& particles);
 
+	void init();
+
+	void findWallCollision(size_t index);
 	void findCollision(size_t aIndex, size_t bIndex);
-	void findWallCollisions(size_t index);
-	void resolveCollisions();
+	void reflectCollision();
 	void step();
 };

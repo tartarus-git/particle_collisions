@@ -70,7 +70,7 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 	// The main reason this is here is for protection against floating point rounding error:
 	// If collision is tested with a particle that is now touching (thanks to the previous collision being resolved), due to rounding errors, that object will probably count as a collision.
 	// To avoid this, just don't check collisions with that object until this object has collided off of something else and the question can be asked again.
-	if (lastParticleCollisions[aIndex] == bIndex) { return; }
+	if (lastParticleCollisions[aIndex] == bIndex && lastParticleCollisions[bIndex] == aIndex) { return; }
 
 
 	Vector2f remainingAlphaVel = alpha.vel * currentSubStep;						// Calculate the collision possiblities using the remaining amount of the velocity that has yet to be travelled in the frame. This is necessary for our stepped approach to resolving massive amounts of collisions.
@@ -115,7 +115,7 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 	// Now to find the collision among the two posibilities.
 	// NOTE: Both possibilities can also be wrong. The reason is because the formula detects collisions along our infinitely long trajectories, but only if the collisions happen in the next frame do they matter to us.
 	// TODO: This actually presents an opportunity for a massive optimization. We can find the lowest t-value, but we can still count it even if it is super high (for example 200). Then we initialize a counter at 200 and for the next 200 frames, we know that no particle in the simulation will collide with anything.
-	// This presents a problem in case the simulation changes somehow while we're doing our "cached frames", like if after 100 frames, a particle appears out of no where, we'are not going to be able to collide with it.
+	// This presents a problem in case the simulation changes somehow while we're doing our "cached frames", like if after 100 frames, a particle appears out of no where, we're not going to be able to collide with it.
 	// To fix this issue, have some sort of clear cache function that any other code will have to call if it changes the simulation on a wim. This will set our counter to 0 or something, and will tell the scene code that it does need to start calculating the physics properly again.
 	// This could improve the performance by so so so so so much when the particles aren't currently colliding with each other. Even if it's just active for a couple of frames at a time, this could make the simulation so much faster.
 
@@ -150,7 +150,7 @@ void Scene::step() {
 		lowestT = 1;
 		noCollisions = true;
 		for (int i = 0; i < lastParticle; i++) {
-			findWallCollision(i);
+			//findWallCollision(i);
 			for (int j = i + 1; j < particleCount; j++) {				// TODO: For loop does first iteration before checking right? If it doesn't that is unnecessary work here.
 				findCollision(i, j);									// NOTE: If a weird intersection happens, then lowestT might be zero before we get to the end of these loops. We could do an if statement to exit prematurely in that case, but the chances of it happening are too low. It would be inefficient.
 			}

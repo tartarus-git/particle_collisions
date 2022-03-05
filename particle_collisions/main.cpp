@@ -89,7 +89,15 @@ void setWindow(int newPosX, int newPosY, unsigned int newWidth, unsigned int new
 	setWindowSize(newWidth, newHeight);
 }
 
+int mouseX;
+int mouseY;
 LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+	switch (uMsg) {
+	case WM_MOUSEMOVE:
+		mouseX = GET_X_LPARAM(lParam);
+		mouseY = GET_Y_LPARAM(lParam);
+		return 0;
+	}
 	if (listenForExitAttempts(uMsg, wParam, lParam)) { return 0; }
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
@@ -123,6 +131,9 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 
 	Renderer renderer(g);
 
+	mouseX = windowWidth / 2;
+	mouseY = windowHeight / 2;
+
 	while (isAlive) {
 		SelectObject(g, bgPen);
 		SelectObject(g, bgBrush);
@@ -133,8 +144,8 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 		BitBlt(finalG, 0, 0, windowWidth, windowHeight, g, 0, 0, SRCCOPY);
 		scene.step();
 		for (int i = 0; i < scene.particleCount; i++) {
-			//scene.particles[i].vel += (Vector2f(windowWidth / 2, windowHeight / 2) - scene.particles[i].pos).normalize() * 0.01f;
-			//scene.particles[i].vel *= 0.995f;
+			scene.particles[i].vel += (Vector2f(mouseX, mouseY) - scene.particles[i].pos).normalize() * 0.01f;
+			scene.particles[i].vel *= 0.995f;
 		}
 	}
 }

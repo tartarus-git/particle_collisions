@@ -136,10 +136,15 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 	// To be compatible with -ffast-math, one should probably just avoid NaN alltogether, which is what we're doing in this class by checking if a == 0 before moving on (see above). (In case you don't understand: dividing by 0 causes NaN, which we thereby avoid)
 	// Another way to check for NaN is to check the bit pattern of the float at hand, which should work with -ffast-math in most cases, but if -ffast-math somehow changes the bit pattern for certain floats (because it doesn't have to stick to IEEE), then this is unreliable as well.
 
+	// The following code looks for the lowest of the two t-values and checks if that value is lower than lowestT. If it is, lowestT is set to that value and this function exits.
+	// Before checking against lowestT, the code will check if the t-value is less than 0, meaning it is invalid. If this is the case, but the other t-value is above 0, that means that the two particles are intersecting as of t=0. This is almost always due to floating point error, meaning it's not perceptible to the eye.
+	// We don't bother moving the particles outside of each other since it's a very small error and resolving it could actually introduce a new error of the same sort. Resolving it could also create more jitter in the case where particles are packed tightly against each other, which isn't optimal.
+	// We handle this case by setting lowestT to 0 and signalling a collision, after which we return. This collides the two particles and allows them to bounce against each other as if they were only touching, which they essentially are, there is pretty much nothing we can do about the floating point error.
+
 	if (t1 < t2) {
 		if (t1 < 0) {
-			if (t2 > 0) { lowestT = 0; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }					// NOTE: It is not possible for t2 to equal 0 when t1 is less than 0 because the particles have to be moving towards each other at this stage, which is why we don't need to check for it, even though it looks like we should.
-			return;
+			if (t2 > 0) { lowestT = 0; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }			// NOTE: It is not possible for t2 to equal 0 when t1 is less than 0 because the particles have to be moving towards each other at this stage,
+			return;																														// which is why we don't need to check for it, even though it looks like we should.
 		}
 		if (t1 < lowestT) { lowestT = t1; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
 	}

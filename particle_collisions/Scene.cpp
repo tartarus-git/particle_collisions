@@ -202,7 +202,7 @@ void Scene::step() {
 				findCollision(i, j, remainingAlphaVel);									// NOTE: If a weird intersection happens, then lowestT might be zero before we get to the end of these loops. We could do an if statement to exit prematurely in that case, but the chances of it happening are too low. It would be inefficient.
 			}
 		}
-		if (noCollisions) { break; }
+		if (noCollisions) { break; }				// CURRENT PROBLEM: noCollisions remains false and we never get out of the step function, even though lowestT always remains 0. This is most likely because of the intersection detection using the span method in the end of the findCollision function. For some reason, when paired with velocity changes through the gravity force, this causes the simulation to get stuck trying to resolve stuff and it never moves forward.
 		float subStepProgress = currentSubStep * lowestT;						// Store the fraction of the current substep that every particle can now safely put behind itself.
 
 		for (int i = 0; i < particleCount; i++) {

@@ -20,6 +20,7 @@ public:
 	float currentSubStep;						// TODO: This one can also be made thread_local.
 	float lowestT;								// TODO: This one too.
 	bool noCollisions;							// TODO: Same thing.
+	bool boundsCollision;
 
 	void loadSize(unsigned int width, unsigned int height);
 
@@ -30,8 +31,8 @@ public:
 
 	void init();
 
-	void findWallCollision(size_t index);
-	void findCollision(size_t aIndex, size_t bIndex);
+	void findWallCollision(size_t index, const Vector2f& remainingVel);
+	void findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainingAlphaVel);
 	void reflectCollision();
 	void step();
 };

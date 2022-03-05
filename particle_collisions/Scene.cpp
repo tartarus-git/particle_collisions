@@ -13,8 +13,21 @@ void Scene::init() {
 	// TODO: Not used right now, either remove or find something for it to do.
 }
 
-void Scene::findWallCollision(size_t index) {
+void Scene::findWallCollision(size_t index, const Vector2f& remainingVel) {
 	Particle& particle = particles[index];
+
+	Vector2f futurePos = particle.pos + remainingVel;
+
+	float paddedBound = width - particle.radius;
+	if (futurePos.x > paddedBound) { float t = (paddedBound - particle.pos.x) / remainingVel.x; if (t < lowestT) { lowestT = t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = false; return; } }
+	else if (futurePos.x < particle.radius) { float t = (particle.radius - particle.pos.x) / remainingVel.x; if (t < lowestT) { lowestT = t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = false; return; } }
+
+	paddedBound = height - particle.radius;
+	if (futurePos.y > paddedBound) { float t = (paddedBound - particle.pos.y) / remainingVel.y; if (t < lowestT) { lowestT = t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = true; return; } }
+	else if (futurePos.y < particle.radius) { float t = (particle.radius - particle.pos.y) / remainingVel.y; if (t < lowestT) { lowestT = t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = true; return; } }
+
+	return;
+
 
 	// NOTE: If a particle is outside the bounds of the scene, the position is corrected and the particle is reflected (much like the particle intersection safeguard at the beginning of findCollision function).
 	// One could do some things (which would be efficient and would technically make the program more efficient) in the case of an out of bounds particle, that would cause the control flow to skip the evaluation of most of the rest of the particle pairs.
@@ -43,7 +56,7 @@ void Scene::findWallCollision(size_t index) {
 	else { unsigned int yBoundary = height - particle.radius; if (particle.pos.y > yBoundary) { particle.pos.y = yBoundary; } }
 }
 
-void Scene::findCollision(size_t aIndex, size_t bIndex) {
+void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainingAlphaVel) {
 	Particle& alpha = particles[aIndex];
 	Particle& beta = particles[bIndex];
 
@@ -76,7 +89,6 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 	float betaVelTowardsComp = beta.vel % distDirNorm;
 	if (alphaVelTowardsComp > betaVelTowardsComp) { return; }
 
-
 	// TODO: The following was the old way of doing things, remove this after tuning the commit message to reflect why we removed this system in favor of the new one.
 	// If last collision was with the same object, it is physically impossible for this collision to be with same object.
 	// The main reason this is here is for protection against floating point rounding error:
@@ -85,7 +97,6 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 	//if (lastParticleCollisions[aIndex] == bIndex && lastParticleCollisions[bIndex] == aIndex) { return; }
 
 
-	Vector2f remainingAlphaVel = alpha.vel * currentSubStep;						// Calculate the collision possiblities using the remaining amount of the velocity that has yet to be travelled in the frame. This is necessary for our stepped approach to resolving massive amounts of collisions.
 	Vector2f remainingBetaVel = beta.vel * currentSubStep;
 
 	// Construct coefficients necessary for solving the quadratic equation the describes particle collisions.
@@ -143,25 +154,35 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 
 	if (t1 < t2) {
 		if (t1 < 0) {
-			if (t2 > 0) { lowestT = 0; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }			// NOTE: It is not possible for t2 to equal 0 when t1 is less than 0 because the particles have to be moving towards each other at this stage,
-			return;																														// which is why we don't need to check for it, even though it looks like we should.
+			if (t2 > 0) { lowestT = 0; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; boundsCollision = false; return; }			// NOTE: It is not possible for t2 to equal 0 when t1 is less than 0 because the particles have to be moving towards each other at this stage,
+			return;																																				// which is why we don't need to check for it, even though it looks like we should.
 		}
-		if (t1 < lowestT) { lowestT = t1; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
+		if (t1 < lowestT) { lowestT = t1; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; boundsCollision = false; return; }
 	}
 	else {
 		if (t2 < 0) {
-			if (t1 > 0) { lowestT = 0; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
+			if (t1 > 0) { lowestT = 0; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; boundsCollision = false; return; }
 			return;
 		}
-		if (t2 < lowestT) { lowestT = t2; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
+		if (t2 < lowestT) { lowestT = t2; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; boundsCollision = false; return; }
 	}
 }
 
 void Scene::reflectCollision() {
 		Particle& alpha = particles[currentColliderA];
+	if (boundsCollision) {
+		if (currentColliderB) {
+			alpha.vel.y = -alpha.vel.y;
+			return;
+		}
+		alpha.vel.x = -alpha.vel.x;
+		return;
+	}
+
 		Particle& beta = particles[currentColliderB];
 		Vector2f normal = (beta.pos - alpha.pos).normalize();								// TODO: Caches these because you calculate them for every pair anyway in the guard code for findCollision.
-		Vector2f relV = ((alpha.vel % normal) * normal) - ((beta.vel % normal) * normal);
+		Vector2f relV = ((alpha.vel % normal) * normal) - ((beta.vel % normal) * normal);			// TODO: This can be algebraically optimized.
+		if (beta.vel % normal >= alpha.vel % normal) { return; }						// TEST THING YOU PROBS WANT TO REMOVE
 		alpha.vel -= relV;
 		beta.vel += relV;
 
@@ -175,9 +196,10 @@ void Scene::step() {
 		lowestT = 1;
 		noCollisions = true;
 		for (int i = 0; i < lastParticle; i++) {
-			//findWallCollision(i);
+			Vector2f remainingAlphaVel = particles[i].vel * currentSubStep;
+			findWallCollision(i, remainingAlphaVel);
 			for (int j = i + 1; j < particleCount; j++) {				// TODO: For loop does first iteration before checking right? If it doesn't that is unnecessary work here.
-				findCollision(i, j);									// NOTE: If a weird intersection happens, then lowestT might be zero before we get to the end of these loops. We could do an if statement to exit prematurely in that case, but the chances of it happening are too low. It would be inefficient.
+				findCollision(i, j, remainingAlphaVel);									// NOTE: If a weird intersection happens, then lowestT might be zero before we get to the end of these loops. We could do an if statement to exit prematurely in that case, but the chances of it happening are too low. It would be inefficient.
 			}
 		}
 		if (noCollisions) { break; }
@@ -186,10 +208,6 @@ void Scene::step() {
 		for (int i = 0; i < particleCount; i++) {
 			Particle& particle = particles[i];
 			particle.pos += particle.vel * subStepProgress;
-			if (particle.pos.x > width - particle.radius || particle.pos.x < 0 + particle.radius) {
-				particle.vel.x = -particle.vel.x; }
-			if (particle.pos.y > height - particle.radius || particle.pos.y < 0 + particle.radius) {
-				particle.vel.y = -particle.vel.y; }
 		}
 		reflectCollision();
 
@@ -197,10 +215,5 @@ void Scene::step() {
 	}
 	for (int i = 0; i < particleCount; i++) {
 		particles[i].pos += particles[i].vel * currentSubStep;
-		Particle& particle = particles[i];
-			if (particle.pos.x > width - particle.radius || particle.pos.x < 0 + particle.radius) {
-				particle.vel.x = -particle.vel.x; }
-			if (particle.pos.y > height - particle.radius || particle.pos.y < 0 + particle.radius) {
-				particle.vel.y = -particle.vel.y; }
 	}
 }

@@ -136,26 +136,20 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 	// To be compatible with -ffast-math, one should probably just avoid NaN alltogether, which is what we're doing in this class by checking if a == 0 before moving on (see above). (In case you don't understand: dividing by 0 causes NaN, which we thereby avoid)
 	// Another way to check for NaN is to check the bit pattern of the float at hand, which should work with -ffast-math in most cases, but if -ffast-math somehow changes the bit pattern for certain floats (because it doesn't have to stick to IEEE), then this is unreliable as well.
 
-	if (t1 >= 0 && t1 < lowestT) {
-		if (t2 >= 0 && t2 < lowestT) { lowestT = t1 < t2 ? t1 : t2; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; }
-		else { lowestT = t1; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; }
+	if (t1 < t2) {
+		if (t1 < 0) {
+			if (t2 > 0) { lowestT = 0; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }					// NOTE: It is not possible for t2 to equal 0 when t1 is less than 0 because the particles have to be moving towards each other at this stage, which is why we don't need to check for it, even though it looks like we should.
+			return;
+		}
+		if (t1 < lowestT) { lowestT = t1; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
 	}
-	else if (t2 >= 0 && t2 < lowestT) { lowestT = t2; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; }
-	else if ((t1 >= 0 && t2 <= 0) || (t2 >= 0 && t1 <= 0)) { lowestT = 0; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
-	else { return; }
-
-	// Fix for when the ball reflects but is reflected right back by another ball and is still inside the original ball because of floating point. This will cause it to totally intersect the first ball without second thought. The following code avoids that happening.
-	Vector2f tempalphapos = alpha.pos + remainingAlphaVel * lowestT;
-	Vector2f tempbetapos = beta.pos + remainingBetaVel * lowestT;
-	distDirNorm = (tempalphapos - tempbetapos).normalize();
-	alphaVelTowardsComp = alpha.vel % distDirNorm;				// TODO: You should probably use the full alpha and beta vel here to try to get as far as possible away from floating point error territory.
-	betaVelTowardsComp = beta.vel % distDirNorm;
-	if (alphaVelTowardsComp > betaVelTowardsComp) {
-		lowestT = 0;
+	else {
+		if (t2 < 0) {
+			if (t1 > 0) { lowestT = 0; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
+			return;
+		}
+		if (t2 < lowestT) { lowestT = t2; currentColliderA = aIndex; currentColliderB = bIndex; noCollisions = false; return; }
 	}
-	currentColliderA = aIndex;
-	currentColliderB = bIndex;
-	noCollisions = false;
 }
 
 void Scene::reflectCollision() {

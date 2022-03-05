@@ -10,10 +10,7 @@ void Scene::loadParticles(std::vector<Particle>&& particles, size_t count) { thi
 void Scene::loadParticles(std::vector<Particle>&& particles) { particleCount = particles.size(); lastParticle = particleCount - 1; this->particles = std::move(particles); }				// Order is reversed here in case the moving of one vector into another changes the size() member function return value in the temporary.
 
 void Scene::init() {
-	lastParticleCollisions.resize(particleCount);
-	for (int i = 0; i < particleCount; i++) {
-		lastParticleCollisions[i] = i;					// Last collision for every particle is itself. Signals that no last collision exists yet.
-	}
+	// TODO: Not used right now, either remove or find something for it to do.
 }
 
 void Scene::findWallCollision(size_t index) {
@@ -59,18 +56,33 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 		toAlphaFromBeta *= adjustment / distance;
 		alpha.pos += toAlphaFromBeta;
 		beta.pos -= toAlphaFromBeta;
-		lowestT = 0;															// If we resolve the collision without marking it as a collision, the two particles might go into each other again on the next frame. We need the reflection code to reflect the particles off of one another so they move in different directions.
-		currentColliderA = aIndex;												// NOTE: Technically, if the velocities are the same, there is no reflection to be done, but spending an if statement on something that probably isn't going to happen often at all is inefficient.
-		currentColliderB = bIndex;		// NOTE: Marking this as collision is also super important because if we didn't, and beta (for example) was already marked as current collider this round, the coming collision would be totally off because we move beta here. We HAVE to mark this as collision to avoid that situation.
-		noCollisions = false;			// Since we move both particles in this intersection resolution code, even if the resolution moves one particle into another intersection situation, the system should naturally resolve everything over the course of the next few rounds (NOT frames). That is beautiful.
-		return;
+		//lowestT = 0;															// If we resolve the collision without marking it as a collision, the two particles might go into each other again on the next frame. We need the reflection code to reflect the particles off of one another so they move in different directions.
+		//currentColliderA = aIndex;												// NOTE: Technically, if the velocities are the same, there is no reflection to be done, but spending an if statement on something that probably isn't going to happen often at all is inefficient.
+		//currentColliderB = bIndex;		// NOTE: Marking this as collision is also super important because if we didn't, and beta (for example) was already marked as current collider this round, the coming collision would be totally off because we move beta here. We HAVE to mark this as collision to avoid that situation.
+		//noCollisions = false;			// Since we move both particles in this intersection resolution code, even if the resolution moves one particle into another intersection situation, the system should naturally resolve everything over the course of the next few rounds (NOT frames). That is beautiful.
+		//return;
 	}*/
 
+	// This chunk of code is super important, it prevents floating point inaccuracies from messing up the simulation and as a bonus, prevents objects from sticking together after some other error causes them to intersect instead of reflect.
+	// The need for this chunk comes from the fact that, after moving two colliding particles right up against each other and reflecting their velocities, because of floating point, they will probably still count as colliding in the next simulation round, which we don't want.
+	// The original fix for this was to keep track of each particles last collision partner, since (because of the nature of physics) you can't collide with the same partner twice in a row. This works fine until the user wants to add additional forces into the simulation (like gravity for example).
+	// When that happens, it actually is possible to collide with the same particle twice in a row, making the system useless. Now, we have a slightly more expensive system which doesn't have any of the faults of the previous system.
+	// It's very simple, if a particle and it's partner are moving away from each other, there is no way they are going to collide, so don't bother checking anything and just exit.
+	// This filters out situations where the velocities of two particles are reflected but they are still right next to each other.
+	// The afore-mentioned bonus comes from the fact that, if two particles end up inside each other but are moving in any directions that aren't the same, this will count as a movement away from each other, which causes the system to allow the particles to cleanly seperate without triggering any collision code.
+	// This should technically never happen in normal operation, but it's nice that the system is forgiving in that regard.
+	Vector2f distDirNorm = toAlphaFromBeta.normalize();
+	float alphaVelTowardsComp = alpha.vel % distDirNorm;
+	float betaVelTowardsComp = beta.vel % distDirNorm;
+	if (alphaVelTowardsComp > betaVelTowardsComp) { return; }
+
+
+	// TODO: The following was the old way of doing things, remove this after tuning the commit message to reflect why we removed this system in favor of the new one.
 	// If last collision was with the same object, it is physically impossible for this collision to be with same object.
 	// The main reason this is here is for protection against floating point rounding error:
 	// If collision is tested with a particle that is now touching (thanks to the previous collision being resolved), due to rounding errors, that object will probably count as a collision.
 	// To avoid this, just don't check collisions with that object until this object has collided off of something else and the question can be asked again.
-	if (lastParticleCollisions[aIndex] == bIndex && lastParticleCollisions[bIndex] == aIndex) { return; }
+	//if (lastParticleCollisions[aIndex] == bIndex && lastParticleCollisions[bIndex] == aIndex) { return; }
 
 
 	Vector2f remainingAlphaVel = alpha.vel * currentSubStep;						// Calculate the collision possiblities using the remaining amount of the velocity that has yet to be travelled in the frame. This is necessary for our stepped approach to resolving massive amounts of collisions.
@@ -135,7 +147,7 @@ void Scene::findCollision(size_t aIndex, size_t bIndex) {
 void Scene::reflectCollision() {
 		Particle& alpha = particles[currentColliderA];
 		Particle& beta = particles[currentColliderB];
-		Vector2f normal = (beta.pos - alpha.pos).normalize();
+		Vector2f normal = (beta.pos - alpha.pos).normalize();								// TODO: Caches these because you calculate them for every pair anyway in the guard code for findCollision.
 		Vector2f relV = ((alpha.vel % normal) * normal) - ((beta.vel % normal) * normal);
 		alpha.vel -= relV;
 		beta.vel += relV;
@@ -162,26 +174,20 @@ void Scene::step() {
 			Particle& particle = particles[i];
 			particle.pos += particle.vel * subStepProgress;
 			if (particle.pos.x > width - particle.radius || particle.pos.x < 0 + particle.radius) {
-			lastParticleCollisions[i] = i;
 				particle.vel.x = -particle.vel.x; }
 			if (particle.pos.y > height - particle.radius || particle.pos.y < 0 + particle.radius) {
-			lastParticleCollisions[i] = i;
 				particle.vel.y = -particle.vel.y; }
 		}
 		reflectCollision();
 
-		lastParticleCollisions[currentColliderB] = currentColliderA;
-		lastParticleCollisions[currentColliderA] = currentColliderB;
 		currentSubStep -= subStepProgress;										// Set the next substep to be equal to the fraction of the current substep that we haven't traversed yet.
 	}
 	for (int i = 0; i < particleCount; i++) {
 		particles[i].pos += particles[i].vel * currentSubStep;
 		Particle& particle = particles[i];
 			if (particle.pos.x > width - particle.radius || particle.pos.x < 0 + particle.radius) {
-			lastParticleCollisions[i] = i;
 				particle.vel.x = -particle.vel.x; }
 			if (particle.pos.y > height - particle.radius || particle.pos.y < 0 + particle.radius) {
-			lastParticleCollisions[i] = i;
 				particle.vel.y = -particle.vel.y; }
 	}
 }

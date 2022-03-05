@@ -132,5 +132,9 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 		renderer.render(scene);
 		BitBlt(finalG, 0, 0, windowWidth, windowHeight, g, 0, 0, SRCCOPY);
 		scene.step();
+		for (int i = 0; i < scene.particleCount; i++) {
+			//scene.particles[i].vel += (Vector2f(windowWidth / 2, windowHeight / 2) - scene.particles[i].pos).normalize() * 0.01f;
+			//scene.particles[i].vel *= 0.995f;
+		}
 	}
 }

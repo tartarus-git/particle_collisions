@@ -11,7 +11,6 @@ public:
 	unsigned int height;
 
 	std::vector<Particle> particles;									// TODO: Write a destructor that handles releasing these even though they do it themselves anyway.
-	std::vector<size_t> lastParticleCollisions;
 	size_t particleCount;
 	size_t lastParticle;
 

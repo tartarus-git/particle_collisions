@@ -88,6 +88,19 @@ void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainin
 	float alphaVelTowardsComp = alpha.vel % distDirNorm;
 	float betaVelTowardsComp = beta.vel % distDirNorm;
 	if (alphaVelTowardsComp > betaVelTowardsComp) { return; }
+	if (alphaVelTowardsComp = betaVelTowardsComp) {
+		size_t& a = aIndex;
+		size_t& b = bIndex;
+		debuglogger::out << "bruh" << debuglogger::endl;
+	}
+
+	// TODO: The fix for the current bug where the sim freezes is to replace the debug code in the second branch above with a return statement.
+	// The bug exists because we weren't and aren't doing anything when alphaVelTowardsComp = betaVelTowardsComp, even though in this case, the particles
+	// can and are likely still moving away from each other. This has to do with the fact that the shadow of the vectors onto the normal makes it look
+	// like the particles are getting closer, but if the actual vectors shoot off to the side super far, while still having the correct shadow, the branch still can signify a moving apart of the particles.
+	// This system is a bit strange, but I don't see a better one at the moment. I'm particularly unhappy with the normalize() function call, since this is expensive because of the square root that it does.
+	// See if you can find a better algorithm for determining when the particles are going away from each other.
+	// By the way, the equals branch is also the one that gets taken when the vel vectors are the same, so it does also do what you'd expect it to, along with signifying a moving apart of the particles.
 
 	// TODO: The following was the old way of doing things, remove this after tuning the commit message to reflect why we removed this system in favor of the new one.
 	// If last collision was with the same object, it is physically impossible for this collision to be with same object.
@@ -182,7 +195,6 @@ void Scene::reflectCollision() {
 		Particle& beta = particles[currentColliderB];
 		Vector2f normal = (beta.pos - alpha.pos).normalize();								// TODO: Caches these because you calculate them for every pair anyway in the guard code for findCollision.
 		Vector2f relV = ((alpha.vel % normal) * normal) - ((beta.vel % normal) * normal);			// TODO: This can be algebraically optimized.
-		if (beta.vel % normal >= alpha.vel % normal) { return; }						// TEST THING YOU PROBS WANT TO REMOVE
 		alpha.vel -= relV;
 		beta.vel += relV;
 
@@ -196,6 +208,13 @@ void Scene::step() {
 		lowestT = 1;
 		noCollisions = true;
 		for (int i = 0; i < lastParticle; i++) {
+			/*if (i == 0) {
+				Particle& relevant = particles[0];
+				Vector2f& relevantPos = relevant.pos;
+				debuglogger::out << "bruh" << debuglogger::endl;
+				//debuglogger::out << particles[i].pos.x << ", " << particles[i].pos.y << '\n';
+				__noop;
+			}*/
 			Vector2f remainingAlphaVel = particles[i].vel * currentSubStep;
 			findWallCollision(i, remainingAlphaVel);
 			for (int j = i + 1; j < particleCount; j++) {				// TODO: For loop does first iteration before checking right? If it doesn't that is unnecessary work here.

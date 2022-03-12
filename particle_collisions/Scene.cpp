@@ -77,30 +77,20 @@ void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainin
 	}*/
 
 	// This chunk of code is super important, it prevents floating point inaccuracies from messing up the simulation and as a bonus, prevents objects from sticking together after some other error causes them to intersect instead of reflect.
-	// The need for this chunk comes from the fact that, after moving two colliding particles right up against each other and reflecting their velocities, because of floating point, they will probably still count as colliding in the next simulation round, which we don't want.
+	// The need for this chunk comes from the fact that, after moving two colliding particles right up against each other and reflecting their velocities, because of floating point error, they will probably still count as colliding in the next simulation round, which we don't want.
 	// The original fix for this was to keep track of each particles last collision partner, since (because of the nature of physics) you can't collide with the same partner twice in a row. This works fine until the user wants to add additional forces into the simulation (like gravity for example).
 	// When that happens, it actually is possible to collide with the same particle twice in a row, making the system useless. Now, we have a slightly more expensive system which doesn't have any of the faults of the previous system.
 	// It's very simple, if a particle and it's partner are moving away from each other, there is no way they are going to collide, so don't bother checking anything and just exit.
 	// This filters out situations where the velocities of two particles are reflected but they are still right next to each other.
 	// The afore-mentioned bonus comes from the fact that, if two particles end up inside each other but are moving in any directions that aren't the same, this will count as a movement away from each other, which causes the system to allow the particles to cleanly seperate without triggering any collision code.
 	// This should technically never happen in normal operation, but it's nice that the system is forgiving in that regard.
+	// NOTE: if alphaVelTowardsComp and betaVelTowardsComp are equal, that doesn't mean that the particles have the same velocity. Those two variables can be equal even when the particles are moving away from each other super fast.
+	// This is because we're just looking at the dot product shadows of the vectors on the distDirNorm. As long as the shadows indicate an equivalent value, the particles can move however far they want in a perpendicular direction from the distDirNorm.
+	// This isn't an issue though, because we want to filter out the moving apart particles anyway. The equivalent case also happens when the velocities are the same, so we can still filter that out as well, so everythings fine, it's just a little unexpected.
 	Vector2f distDirNorm = toAlphaFromBeta.normalize();
 	float alphaVelTowardsComp = alpha.vel % distDirNorm;
 	float betaVelTowardsComp = beta.vel % distDirNorm;
-	if (alphaVelTowardsComp > betaVelTowardsComp) { return; }
-	if (alphaVelTowardsComp = betaVelTowardsComp) {
-		size_t& a = aIndex;
-		size_t& b = bIndex;
-		debuglogger::out << "bruh" << debuglogger::endl;
-	}
-
-	// TODO: The fix for the current bug where the sim freezes is to replace the debug code in the second branch above with a return statement.
-	// The bug exists because we weren't and aren't doing anything when alphaVelTowardsComp = betaVelTowardsComp, even though in this case, the particles
-	// can and are likely still moving away from each other. This has to do with the fact that the shadow of the vectors onto the normal makes it look
-	// like the particles are getting closer, but if the actual vectors shoot off to the side super far, while still having the correct shadow, the branch still can signify a moving apart of the particles.
-	// This system is a bit strange, but I don't see a better one at the moment. I'm particularly unhappy with the normalize() function call, since this is expensive because of the square root that it does.
-	// See if you can find a better algorithm for determining when the particles are going away from each other.
-	// By the way, the equals branch is also the one that gets taken when the vel vectors are the same, so it does also do what you'd expect it to, along with signifying a moving apart of the particles.
+	if (alphaVelTowardsComp >= betaVelTowardsComp) { return; }
 
 	// TODO: The following was the old way of doing things, remove this after tuning the commit message to reflect why we removed this system in favor of the new one.
 	// If last collision was with the same object, it is physically impossible for this collision to be with same object.
@@ -109,7 +99,6 @@ void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainin
 	// To avoid this, just don't check collisions with that object until this object has collided off of something else and the question can be asked again.
 	//if (lastParticleCollisions[aIndex] == bIndex && lastParticleCollisions[bIndex] == aIndex) { return; }
 
-
 	Vector2f remainingBetaVel = beta.vel * currentSubStep;
 
 	// Construct coefficients necessary for solving the quadratic equation the describes particle collisions.
@@ -117,8 +106,9 @@ void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainin
 	// a coefficient
 	Vector2f velDiff = remainingAlphaVel - remainingBetaVel;
 	float a = velDiff % velDiff;
-	if (a == 0) { return; }							// This means that the velocities of the two particles are exactly the same, which means they can't be colliding, they could only theoretically be inside of each other, which we solve in the above code, so we just need to exit here.
-	// Leaving this if statement out also makes it possible for the following code to divide by zero, which has bad results for the simulation, so we need to nip that possiblity in the bud as well.
+	// NOTE: We previously did "if (a == 0) { return; }" here, because we needed to protect ourselves from divide by zero errors in the following code.
+	// We don't do that anymore because for a to be zero, the particles have to be not moving relative to each other (velocities pointing in exactly the same direction), which the above guard code with the distDirNorm stuff filters out for us already. a == 0 is not possible, so we don't need the check anymore.
+	// I initially worried that floating point error could still cause a to be zero even if the guard code doesn't filter anything out, but I've gone through the code and it looks impossible. I'm very sure that it's completely safe, so no reason to use a == 0 check here.
 
 	// b coefficient (additionally, I've divided by 2a from the get-go so that it fits nicely into a more efficient version of the quadratic equation)
 	// NOTE: After reading this, you might think that I've forgotten to divide by 2, but I did it by removing a multiplication that was supposed to be there, so everythings fine, don't worry.
@@ -197,9 +187,6 @@ void Scene::reflectCollision() {
 		Vector2f relV = ((alpha.vel % normal) * normal) - ((beta.vel % normal) * normal);			// TODO: This can be algebraically optimized.
 		alpha.vel -= relV;
 		beta.vel += relV;
-
-			//if (particle.pos.y > height - particle.radius || particle.pos.y < 0 + particle.radius) { particle.vel.y = -particle.vel.y; }
-			//if (particle.pos.x > width - particle.radius || particle.pos.x < 0 + particle.radius) { particle.vel.x = -particle.vel.x; }				// This should probably reset last particle collided metric because physics now allows it to hit the same ball again. TODO.
 }
 
 void Scene::step() {
@@ -208,20 +195,13 @@ void Scene::step() {
 		lowestT = 1;
 		noCollisions = true;
 		for (int i = 0; i < lastParticle; i++) {
-			/*if (i == 0) {
-				Particle& relevant = particles[0];
-				Vector2f& relevantPos = relevant.pos;
-				debuglogger::out << "bruh" << debuglogger::endl;
-				//debuglogger::out << particles[i].pos.x << ", " << particles[i].pos.y << '\n';
-				__noop;
-			}*/
 			Vector2f remainingAlphaVel = particles[i].vel * currentSubStep;
 			findWallCollision(i, remainingAlphaVel);
 			for (int j = i + 1; j < particleCount; j++) {				// TODO: For loop does first iteration before checking right? If it doesn't that is unnecessary work here.
-				findCollision(i, j, remainingAlphaVel);									// NOTE: If a weird intersection happens, then lowestT might be zero before we get to the end of these loops. We could do an if statement to exit prematurely in that case, but the chances of it happening are too low. It would be inefficient.
+				findCollision(i, j, remainingAlphaVel);									// NOTE: If a weird intersection happens, then lowestT might be zero before we get to the end of these loops. We could do an if statement to exit prematurely in that case, but the chances of it happening are too low. It would be inefficient to waste time checking that case.
 			}
 		}
-		if (noCollisions) { break; }				// CURRENT PROBLEM: noCollisions remains false and we never get out of the step function, even though lowestT always remains 0. This is most likely because of the intersection detection using the span method in the end of the findCollision function. For some reason, when paired with velocity changes through the gravity force, this causes the simulation to get stuck trying to resolve stuff and it never moves forward.
+		if (noCollisions) { break; }
 		float subStepProgress = currentSubStep * lowestT;						// Store the fraction of the current substep that every particle can now safely put behind itself.
 
 		for (int i = 0; i < particleCount; i++) {

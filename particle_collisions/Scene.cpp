@@ -34,6 +34,15 @@ bool Scene::resolveIntersection(size_t aIndex, size_t bIndex) {
 	return false;
 }
 
+// SIDE-NOTE: As far as I can tell after researching a bit, CPU caches are predictive, meaning somewhere in the CPU, something is predicting which memory you're going to use next and trying to make it available to you in the CPU caches before you even need it.
+// If I'm understanding that right, that means that sometimes, it's better to calculate a whole list of items instead of calculating only those items that you need to calculate. By going through the list from left to right, the predictor can fill the cache without you ever experiencing a cache miss.
+// If you go through in a random access fashion, you'll get cache misses, because the predictor can't predict your moves.
+// I've previously thought that the amount of cache misses doesn't matter in this case because you MUST have at least as many when going through the list from left to right, because eventually you're going to cross borders where the cache needs to fetch new data, even if you are accessing linearly.
+// If that were the case, accessing a couple of values randomly would be better than accessing the full list.
+// Don't get me wrong, accessing a couple of values is still better, but you need a larger overall list to justify doing it, now that linear reads apparently produce no cache misses.
+// TODO: Armed with all this knowledge, a question pops up: Why doesn't there exist some sort of instruction to actively tell the caching mechanism what memory you're going to need in the next couple of units of time? That way, there need not be any prediction at all, we can just tell the CPU what we want in advance.
+// Seems like that would make a lot of things way faster, there's gotta be a good reason people haven't done that yet.
+
 bool Scene::resolveIntersections(size_t particleIndex) {
 	bool changed = false;
 	for (size_t i = 0; i < particleIndex; i++) { changed = Scene::resolveIntersection(particleIndex, i); }

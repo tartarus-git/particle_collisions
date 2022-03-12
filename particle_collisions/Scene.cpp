@@ -13,18 +13,101 @@ void Scene::init() {
 	// TODO: Not used right now, either remove or find something for it to do.
 }
 
+std::vector<size_t> invalidatedParticles;
+
+bool Scene::resolveIntersection(size_t aIndex, size_t bIndex) {
+	Particle& alpha = particles[aIndex];
+	Particle& beta = particles[bIndex];
+
+	float minDist = alpha.radius + beta.radius;
+	Vector2f toAlphaFromBeta = alpha.pos - beta.pos;
+	float distance = toAlphaFromBeta.getLength();
+	if (distance < minDist) {
+		float adjustment = minDist - distance;						// TODO: You should reflect the particles directly from this code block, that way, you save all the calculation required normally when resolving intersections where the particles are going towards each other.
+		toAlphaFromBeta *= adjustment / distance;
+		alpha.pos += toAlphaFromBeta;
+		beta.pos -= toAlphaFromBeta;
+		invalidatedParticles.push_back(bIndex);							// NOTE: Instead of putting this index in exactly the right spot, so that the list remains sorted (which would be O(n/2 * k) on average), we sort the list at the end (which probably gives us a better time complexity).
+		while (resolveIntersections(bIndex)) { }						// TODO: Will this whole recursive approach bite us in our back-side eventually, should we use loops?
+		return true;
+	}
+	return false;
+}
+
+bool Scene::resolveIntersections(size_t particleIndex) {
+	bool changed = false;
+	for (size_t i = 0; i < particleIndex; i++) { changed = Scene::resolveIntersection(particleIndex, i); }
+	for (size_t i = particleIndex + 1; i < particleCount; i++) { changed = Scene::resolveIntersection(particleIndex, i); }
+	return changed;
+}
+
+// TODO: The below is a modified version of the counting sort algorithm, which works great for things whose integer representations need to be sorted.
+// This is AFAIK the most efficient sorting algorithm to sort integers (at least unsigned ones, haven't thought about signed ones).
+// Write some documentation in the code about what the different steps of this algorithm are and what the original algorithm looks like. Also explain the difference between the standard algorithm and the one shown in that one bookmarked blog-post.
+// Also write documentation for the function as a whole of course.
+void Scene::sortInvalidatedParticlesAndRemoveMultiples() {
+	bool* particleCounts = new bool[particleCount];
+	for (size_t i = 0; i < invalidatedParticles.size(); i++) { particleCounts[i] = true; }
+	size_t sortedInvalidatedPartilcesIndex = 0;
+	for (size_t i = 0; i < particleCount; i++) { if (particleCounts[i]) { invalidatedParticles[sortedInvalidatedPartilcesIndex++] = i; } }
+	delete[] particleCounts;
+}
+
+void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainingAlphaVel) {
+	// TODO: Implement raw collision calculation, that just finds the t value and checks if this is the most relevant collision, same as other one, just without the guard code, because that can't be useful at this stage.
+}
+
+void Scene::recalculateInvalidatedData(size_t aIndex, size_t bIndex) {
+	sortInvalidatedParticlesAndRemoveMultiples();
+	size_t previousNormalParticleIndex = 0;
+	for (size_t invalidatedParticleIndex = 0; invalidatedParticleIndex < invalidatedParticles.size(); invalidatedParticleIndex++)
+	{
+		for (size_t previousInvalidatedParticleIndex = 0; previousInvalidatedParticleIndex < invalidatedParticleIndex; previousInvalidatedParticleIndex++)
+		{						// TODO: using iterators here might even be more efficient, check those out and see if they're applicable here.
+			for (; previousNormalParticleIndex < invalidatedParticles[previousInvalidatedParticleIndex]; previousNormalParticleIndex++)
+			{
+				findCollision(invalidatedParticles[invalidatedParticleIndex], previousNormalParticleIndex, Vector2f(0, 0));
+			}
+			previousNormalParticleIndex++;
+		}
+		for (; previousNormalParticleIndex < invalidatedParticles[invalidatedParticleIndex]; previousNormalParticleIndex++)
+		{
+			findCollision(invalidatedParticles[invalidatedParticleIndex], previousNormalParticleIndex, Vector2f(0 ,0));
+		}
+		previousNormalParticleIndex++;
+		for (; previousNormalParticleIndex < particleCount; previousNormalParticleIndex++)
+		{
+			findCollision(invalidatedParticles[invalidatedParticleIndex], previousNormalParticleIndex, Vector2f(0 ,0));
+		}
+	}
+}
+
 void Scene::findWallCollision(size_t index, const Vector2f& remainingVel) {
 	Particle& particle = particles[index];
 
+	float paddedWidth = width - particle.radius;					// TODO: This paddedBound stuff can be easily cached. You should make a very simple system of functions that handle the various caches that you're gonna end up having. To make sure they get updated at the right time.
+	float paddedHeight = height - particle.radius;
+	if (particle.lastInteractionWasIntersection) {
+		invalidatedParticles.clear();
+		invalidatedParticles.push_back(index);
+		do {
+			if (particle.pos.x > paddedWidth) { particle.pos.x = paddedWidth; }
+			else if (particle.pos.x < particle.radius) { particle.pos.x = particle.radius; }
+
+			if (particle.pos.y > paddedHeight) { particle.pos.y = paddedHeight; }
+			else if (particle.pos.y < particle.radius) { particle.pos.y = particle.radius; }
+		}
+		while (Scene::resolveIntersections(index));
+	}
+
 	Vector2f futurePos = particle.pos + remainingVel;
 
-	float paddedBound = width - particle.radius;
-	if (futurePos.x > paddedBound) { float t = (paddedBound - particle.pos.x) / remainingVel.x; if (t < lowestT) { lowestT = t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = false; return; } }
-	else if (futurePos.x < particle.radius) { float t = (particle.radius - particle.pos.x) / remainingVel.x; if (t < lowestT) { lowestT = t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = false; return; } }
+	// TODO: Find a way to clean up the next bit of code, even if it's just putting it on separate lines.
+	if (futurePos.x > paddedWidth) { float t = (paddedWidth - particle.pos.x) / remainingVel.x; if (t < lowestT) { lowestT = t < 0 ? 0 : t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = false; return; } }
+	else if (futurePos.x < particle.radius) { float t = (particle.radius - particle.pos.x) / remainingVel.x; if (t < lowestT) { lowestT = t < 0 ? 0 : t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = false; return; } }
 
-	paddedBound = height - particle.radius;
-	if (futurePos.y > paddedBound) { float t = (paddedBound - particle.pos.y) / remainingVel.y; if (t < lowestT) { lowestT = t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = true; return; } }
-	else if (futurePos.y < particle.radius) { float t = (particle.radius - particle.pos.y) / remainingVel.y; if (t < lowestT) { lowestT = t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = true; return; } }
+	if (futurePos.y > paddedHeight) { float t = (paddedHeight - particle.pos.y) / remainingVel.y; if (t < lowestT) { lowestT = t < 0 ? 0 : t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = true; return; } }
+	else if (futurePos.y < particle.radius) { float t = (particle.radius - particle.pos.y) / remainingVel.y; if (t < lowestT) { lowestT = t < 0 ? 0 : t; noCollisions = false; boundsCollision = true; currentColliderA = index; currentColliderB = true; return; } }
 
 	return;
 
@@ -59,6 +142,21 @@ void Scene::findWallCollision(size_t index, const Vector2f& remainingVel) {
 void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainingAlphaVel) {
 	Particle& alpha = particles[aIndex];
 	Particle& beta = particles[bIndex];
+
+	float minDist = alpha.radius + beta.radius;
+	Vector2f toAlphaFromBeta = alpha.pos - beta.pos;
+	float distance = toAlphaFromBeta.getLength();
+	if (distance < minDist) {
+		float adjustment = minDist - distance;						// TODO: You should reflect the particles directly from this code block, that way, you save all the calculation required normally when resolving intersections where the particles are going towards each other.
+		toAlphaFromBeta *= adjustment / distance;
+		alpha.pos += toAlphaFromBeta;
+		beta.pos -= toAlphaFromBeta;
+		invalidatedParticles.clear();
+		invalidatedParticles.push_back(aIndex);
+		invalidatedParticles.push_back(bIndex);							// NOTE: Instead of putting this index in exactly the right spot, so that the list remains sorted (which would be O(n/2 * k) on average), we sort the list at the end (which probably gives us a better time complexity).
+		while (resolveIntersections(bIndex)) { }						// TODO: Will this whole recursive approach bite us in our back-side eventually, should we use loops?
+		recalculateInvalidatedData(aIndex, bIndex);
+	}
 
 	// If the two particles are inside each other (which shouldn't ever happen unless they are spawned wrong or their positions are changed from outside of the simulation), move them outside of each other using the shortest possible path.
 	float minDist = alpha.radius + beta.radius;				// TODO: This should be moved to the top, two particles can still intersect even though they just hit each other if some weird outside forces are applied, this safety feature needs to be at the top.
@@ -147,6 +245,8 @@ void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainin
 	// Before checking against lowestT, the code will check if the t-value is less than 0, meaning it is invalid. If this is the case, but the other t-value is above 0, that means that the two particles are intersecting as of t=0. This is almost always due to floating point error, meaning it's not perceptible to the eye.
 	// We don't bother moving the particles outside of each other since it's a very small error and resolving it could actually introduce a new error of the same sort. Resolving it could also create more jitter in the case where particles are packed tightly against each other, which isn't optimal.
 	// We handle this case by setting lowestT to 0 and signalling a collision, after which we return. This collides the two particles and allows them to bounce against each other as if they were only touching, which they essentially are, there is pretty much nothing we can do about the floating point error.
+	// NOTE: BTW, the above situation can happen (for example) when a particle reflects but gets reflected back by another particle before it has a chance to follow it's reflected velocity. When this happens, it'll be moving towards the original reflection partner while still being inside of it, causing it to not
+	// be filtered out by the guard code (not that we want it to be). This is why we need the extra cases here, so that we can overcome this situation, which is solely caused by floating point error making the two particles be inside each other a little bit.
 
 	if (t1 < t2) {
 		if (t1 < 0) {
@@ -181,6 +281,13 @@ void Scene::reflectCollision() {
 		alpha.vel -= relV;
 		beta.vel += relV;
 }
+
+// TODO: Currently, we are checking for intersections for every particle pair in every sub-step. It would be way more efficient to check all the intersections in the first sub-step, but not in the rest.
+// If the first substep ends up in a valid state, all the permutations to that state that we do in the next state don't cause any intersections.
+// The only way intersections can happen is through external position changes between STEPS. It is not possible for outside pos changes to come in while we are substepping, making our guard code partially useless.
+// This is of course only if there isn't another thread messing with our stuff, but that would probably cause other problems as well and that isn't expected anyway, so don't worry about it.
+// Also, bit-flips due to cosmic rays and other radiation could definitely mess up our positions while we are substepping, but we can never know if a position discrepancy is due to floating point error or due to intersections without using a window, which we don't want to do because it's not realistic.
+// That means, that even if we were to use guard code every sub-step, we would still be just as vulnerable to bit-flips. There is no reason not to make this more efficient by moving the guard code outside of the substep loop.
 
 void Scene::step() {
 	currentSubStep = 1;

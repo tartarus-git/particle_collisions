@@ -31,6 +31,12 @@ public:
 
 	void init();
 
+	bool resolveIntersection(size_t aIndex, size_t bIndex);
+	bool resolveIntersections(size_t particleIndex);
+
+	void sortInvalidatedParticlesAndRemoveMultiples();
+	void recalculateInvalidatedData(size_t aIndex, size_t bIndex);
+
 	void findWallCollision(size_t index, const Vector2f& remainingVel);
 	void findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainingAlphaVel);
 	void reflectCollision();

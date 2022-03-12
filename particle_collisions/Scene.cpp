@@ -92,13 +92,6 @@ void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainin
 	float betaVelTowardsComp = beta.vel % distDirNorm;
 	if (alphaVelTowardsComp >= betaVelTowardsComp) { return; }
 
-	// TODO: The following was the old way of doing things, remove this after tuning the commit message to reflect why we removed this system in favor of the new one.
-	// If last collision was with the same object, it is physically impossible for this collision to be with same object.
-	// The main reason this is here is for protection against floating point rounding error:
-	// If collision is tested with a particle that is now touching (thanks to the previous collision being resolved), due to rounding errors, that object will probably count as a collision.
-	// To avoid this, just don't check collisions with that object until this object has collided off of something else and the question can be asked again.
-	//if (lastParticleCollisions[aIndex] == bIndex && lastParticleCollisions[bIndex] == aIndex) { return; }
-
 	Vector2f remainingBetaVel = beta.vel * currentSubStep;
 
 	// Construct coefficients necessary for solving the quadratic equation the describes particle collisions.

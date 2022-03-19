@@ -123,7 +123,7 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 
 	std::vector<Particle> particles;
 	for (int i = 0; i < 100; i++) {
-		particles.push_back(Particle(Vector2f((rand() % (windowWidth - 200)) + 100, (rand() % (windowHeight - 200)) + 100), Vector2f(0.1f, 0), 7, 1));
+		particles.push_back(Particle(Vector2f((rand() % (windowWidth - 200)) + 100, (rand() % (windowHeight - 200)) + 100), Vector2f(0.1f, 0), rand() % 20 + 5, 1));
 	}
 	//particles.push_back(Particle(Vector2f(100, 100), Vector2f(0.1f, 0), 20, 1));
 	//particles.push_back(Particle(Vector2f(200, 100), Vector2f(-0.1f, 0), 20, 1));
@@ -156,7 +156,7 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 		}
 
 		if (addParticle) {
-			scene.particles.push_back(Particle(Vector2f(mouseX, mouseY), Vector2f(0, 0), 20, 10));
+			scene.particles.push_back(Particle(Vector2f(mouseX, mouseY), Vector2f(0, 0), 20, 1));
 			scene.particleCount++;
 			scene.lastParticle++;
 			scene.particles[scene.lastParticle].lastInteractionWasIntersection = true;

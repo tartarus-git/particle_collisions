@@ -33,6 +33,10 @@ Vector2f Vector2f::operator*(const Vector2f& other) const noexcept { return Vect
 
 Vector2f& Vector2f::operator*=(const Vector2f& other) noexcept { x *= other.x; y *= other.y; return *this; }
 
+Vector2f Vector2f::operator/(float divisor) const noexcept { return Vector2f(x / divisor, y / divisor); }
+
+Vector2f& Vector2f::operator/=(float divisor) noexcept { x /= divisor; y /= divisor; return *this; }
+
 Vector2f Vector2f::operator-() const noexcept { return Vector2f(-x, -y); }
 
 bool Vector2f::operator==(const Vector2f& other) const noexcept { return x == other.x && y == other.y; }

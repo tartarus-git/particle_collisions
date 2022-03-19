@@ -91,11 +91,15 @@ void setWindow(int newPosX, int newPosY, unsigned int newWidth, unsigned int new
 
 int mouseX;
 int mouseY;
+bool addParticle = false;
 LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	switch (uMsg) {
 	case WM_MOUSEMOVE:
 		mouseX = GET_X_LPARAM(lParam);
 		mouseY = GET_Y_LPARAM(lParam);
+		return 0;
+	case WM_LBUTTONDOWN:
+		addParticle = true;
 		return 0;
 	}
 	if (listenForExitAttempts(uMsg, wParam, lParam)) { return 0; }
@@ -144,8 +148,20 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 		BitBlt(finalG, 0, 0, windowWidth, windowHeight, g, 0, 0, SRCCOPY);
 		scene.step();
 		for (int i = 0; i < scene.particleCount; i++) {
-			scene.particles[i].vel += (Vector2f(mouseX, mouseY) - scene.particles[i].pos).normalize() * 0.01f;
+			Vector2f diff = Vector2f(mouseX, mouseY) - scene.particles[i].pos;
+			float length = diff.getLength();
+			if (length < 0.001f) { continue; }
+			scene.particles[i].vel += diff / length * 0.01f;
 			scene.particles[i].vel *= 0.995f;
+		}
+
+		if (addParticle) {
+			scene.particles.push_back(Particle(Vector2f(mouseX, mouseY), Vector2f(0, 0), 20, 1));
+			scene.particleCount++;
+			scene.lastParticle++;
+			scene.particles[scene.lastParticle].lastInteractionWasIntersection = true;
+			scene.postLoadInit();
+			addParticle = false;
 		}
 	}
 }

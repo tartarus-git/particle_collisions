@@ -46,6 +46,10 @@ public:
 
 	Vector2f& operator*=(const Vector2f& other) noexcept;				// multiply vector with another vector (element by element) as well as return new version
 
+	Vector2f operator/(float divisor) const noexcept;
+
+	Vector2f& operator/=(float divisor) noexcept;
+
 	Vector2f operator-() const noexcept;						// return the opposite vector (a vector pointing in the opposite direction)
 
 	bool operator==(const Vector2f& other) const noexcept;				// returns true if two vectors are the same (can get hairy because of floating-point)

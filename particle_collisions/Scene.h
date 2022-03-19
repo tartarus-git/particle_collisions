@@ -37,8 +37,8 @@ public:
 	bool resolveIntersectionWithParticle(size_t aIndex, size_t bIndex);
 	void resolveIntersections(size_t particleIndex);
 
-	void sortInvalidatedParticlesAndRemoveMultiples();
-	void recalculateInvalidatedData(size_t aIndex, size_t bIndex);
+	void sortInvalidatedParticlesAndRemoveMultiples(size_t currentLoopIndex);
+	void recalculateInvalidatedData(size_t currentLoopIndex);
 
 	void findWallCollision(size_t index, const Vector2f& remainingVel);
 	void findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainingAlphaVel);

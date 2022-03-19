@@ -9,26 +9,46 @@ void Scene::loadParticles(const std::vector<Particle>& particles) { this->partic
 void Scene::loadParticles(std::vector<Particle>&& particles, size_t count) { this->particles = std::move(particles); particleCount = count; lastParticle = count - 1; }
 void Scene::loadParticles(std::vector<Particle>&& particles) { particleCount = particles.size(); lastParticle = particleCount - 1; this->particles = std::move(particles); }				// Order is reversed here in case the moving of one vector into another changes the size() member function return value in the temporary.
 
-void Scene::init() {
-	// TODO: Not used right now, either remove or find something for it to do.
+void Scene::postLoadInit() {
+	lastIntersectionPartners.resize(particles.size());
+	lastIntersectionWasWithWall.resize(particles.size());
+	for (size_t i = 0; i < lastIntersectionPartners.size(); i++) { lastIntersectionPartners[i] = i; lastIntersectionWasWithWall[i] = false; }
 }
 
 std::vector<size_t> invalidatedParticles;
 
-bool Scene::resolveIntersection(size_t aIndex, size_t bIndex) {
+bool Scene::resolveIntersectionWithBounds(size_t particleIndex) {
+	if (lastIntersectionWasWithWall[particleIndex]) { return false; }
+	Particle& particle = particles[particleIndex];
+
+	uint32_t paddedWidth = width - particle.radius;
+	if (particle.pos.x > paddedWidth) { particle.pos.x = paddedWidth; }
+	else if (particle.pos.x < particle.radius) { particle.pos.x = particle.radius; }
+
+	uint32_t paddedHeight = height - particle.radius;
+	if (particle.pos.y > paddedHeight) { particle.pos.y = paddedHeight; }
+	else if (particle.pos.y < particle.radius) { particle.pos.y = particle.radius; }
+
+	lastIntersectionWasWithWall[particleIndex] = true;
+	lastIntersectionPartners[particleIndex] = particleIndex;
+}
+
+bool Scene::resolveIntersectionWithParticle(size_t aIndex, size_t bIndex) {
 	Particle& alpha = particles[aIndex];
 	Particle& beta = particles[bIndex];
 
 	float minDist = alpha.radius + beta.radius;
 	Vector2f toAlphaFromBeta = alpha.pos - beta.pos;
 	float distance = toAlphaFromBeta.getLength();
-	if (distance < minDist) {
+	if ((lastIntersectionPartners[aIndex] != bIndex || lastIntersectionPartners[bIndex] != aIndex) && distance < minDist) {
 		float adjustment = minDist - distance;						// TODO: You should reflect the particles directly from this code block, that way, you save all the calculation required normally when resolving intersections where the particles are going towards each other.
 		toAlphaFromBeta *= adjustment / distance;
 		alpha.pos += toAlphaFromBeta;
 		beta.pos -= toAlphaFromBeta;
+		lastIntersectionPartners[aIndex] = bIndex;
+		lastIntersectionPartners[bIndex] = aIndex;
 		invalidatedParticles.push_back(bIndex);							// NOTE: Instead of putting this index in exactly the right spot, so that the list remains sorted (which would be O(n/2 * k) on average), we sort the list at the end (which probably gives us a better time complexity).
-		while (resolveIntersections(bIndex)) { }						// TODO: Will this whole recursive approach bite us in our back-side eventually, should we use loops?
+		resolveIntersections(bIndex);						// TODO: Will this whole recursive approach bite us in our back-side eventually, should we use loops?
 		return true;
 	}
 	return false;
@@ -43,11 +63,14 @@ bool Scene::resolveIntersection(size_t aIndex, size_t bIndex) {
 // TODO: Armed with all this knowledge, a question pops up: Why doesn't there exist some sort of instruction to actively tell the caching mechanism what memory you're going to need in the next couple of units of time? That way, there need not be any prediction at all, we can just tell the CPU what we want in advance.
 // Seems like that would make a lot of things way faster, there's gotta be a good reason people haven't done that yet.
 
-bool Scene::resolveIntersections(size_t particleIndex) {
-	bool changed = false;
-	for (size_t i = 0; i < particleIndex; i++) { changed = Scene::resolveIntersection(particleIndex, i); }
-	for (size_t i = particleIndex + 1; i < particleCount; i++) { changed = Scene::resolveIntersection(particleIndex, i); }
-	return changed;
+void Scene::resolveIntersections(size_t particleIndex) {
+	while (true) {
+		bool changed = false;
+		if (resolveIntersectionWithBounds(particleIndex)) { changed = true; }
+		for (size_t i = 0; i < particleIndex; i++) { if (resolveIntersectionWithParticle(particleIndex, i)) { changed = true; } }
+		for (size_t i = particleIndex + 1; i < particleCount; i++) { if (resolveIntersectionWithParticle(particleIndex, i)) { changed = true; } }
+		if (!changed) { break; }
+	}
 }
 
 // TODO: The below is a modified version of the counting sort algorithm, which works great for things whose integer representations need to be sorted.
@@ -56,15 +79,16 @@ bool Scene::resolveIntersections(size_t particleIndex) {
 // Also write documentation for the function as a whole of course.
 void Scene::sortInvalidatedParticlesAndRemoveMultiples() {
 	bool* particleCounts = new bool[particleCount];
-	for (size_t i = 0; i < invalidatedParticles.size(); i++) { particleCounts[i] = true; }
-	size_t sortedInvalidatedPartilcesIndex = 0;
-	for (size_t i = 0; i < particleCount; i++) { if (particleCounts[i]) { invalidatedParticles[sortedInvalidatedPartilcesIndex++] = i; } }
+	for (size_t i = 0; i < invalidatedParticles.size(); i++) { particleCounts[invalidatedParticles[i]] = true; }
+	size_t sortedInvalidatedParticlesIndex = 0;
+	for (size_t i = 0; i < particleCount; i++) { if (particleCounts[i]) { invalidatedParticles[sortedInvalidatedParticlesIndex++] = i; } }
 	delete[] particleCounts;
+	invalidatedParticles.resize(sortedInvalidatedParticlesIndex);
 }
 
-void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainingAlphaVel) {
+/*void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainingAlphaVel) {
 	// TODO: Implement raw collision calculation, that just finds the t value and checks if this is the most relevant collision, same as other one, just without the guard code, because that can't be useful at this stage.
-}
+}*/
 
 void Scene::recalculateInvalidatedData(size_t aIndex, size_t bIndex) {
 	sortInvalidatedParticlesAndRemoveMultiples();
@@ -95,19 +119,7 @@ void Scene::findWallCollision(size_t index, const Vector2f& remainingVel) {
 	Particle& particle = particles[index];
 
 	float paddedWidth = width - particle.radius;					// TODO: This paddedBound stuff can be easily cached. You should make a very simple system of functions that handle the various caches that you're gonna end up having. To make sure they get updated at the right time.
-	float paddedHeight = height - particle.radius;
-	if (particle.lastInteractionWasIntersection) {
-		invalidatedParticles.clear();
-		invalidatedParticles.push_back(index);
-		do {
-			if (particle.pos.x > paddedWidth) { particle.pos.x = paddedWidth; }
-			else if (particle.pos.x < particle.radius) { particle.pos.x = particle.radius; }
-
-			if (particle.pos.y > paddedHeight) { particle.pos.y = paddedHeight; }
-			else if (particle.pos.y < particle.radius) { particle.pos.y = particle.radius; }
-		}
-		while (Scene::resolveIntersections(index));
-	}
+	float paddedHeight = height - particle.radius;					// TODO: I'm very sure that storing an array of cached padded bounds for each particle (since they all can be differently sized) would not make this more efficient. The amount of instructions stays the same AFAIK. Can't see how it would help.
 
 	Vector2f futurePos = particle.pos + remainingVel;
 
@@ -152,25 +164,10 @@ void Scene::findCollision(size_t aIndex, size_t bIndex, const Vector2f& remainin
 	Particle& alpha = particles[aIndex];
 	Particle& beta = particles[bIndex];
 
-	float minDist = alpha.radius + beta.radius;
-	Vector2f toAlphaFromBeta = alpha.pos - beta.pos;
-	float distance = toAlphaFromBeta.getLength();
-	if (distance < minDist) {
-		float adjustment = minDist - distance;						// TODO: You should reflect the particles directly from this code block, that way, you save all the calculation required normally when resolving intersections where the particles are going towards each other.
-		toAlphaFromBeta *= adjustment / distance;
-		alpha.pos += toAlphaFromBeta;
-		beta.pos -= toAlphaFromBeta;
-		invalidatedParticles.clear();
-		invalidatedParticles.push_back(aIndex);
-		invalidatedParticles.push_back(bIndex);							// NOTE: Instead of putting this index in exactly the right spot, so that the list remains sorted (which would be O(n/2 * k) on average), we sort the list at the end (which probably gives us a better time complexity).
-		while (resolveIntersections(bIndex)) { }						// TODO: Will this whole recursive approach bite us in our back-side eventually, should we use loops?
-		recalculateInvalidatedData(aIndex, bIndex);
-	}
-
 	// If the two particles are inside each other (which shouldn't ever happen unless they are spawned wrong or their positions are changed from outside of the simulation), move them outside of each other using the shortest possible path.
 	float minDist = alpha.radius + beta.radius;				// TODO: This should be moved to the top, two particles can still intersect even though they just hit each other if some weird outside forces are applied, this safety feature needs to be at the top.
 	Vector2f toAlphaFromBeta = alpha.pos - beta.pos;
-	float distance = toAlphaFromBeta.getLength();
+	//float distance = toAlphaFromBeta.getLength();
 	/*if (distance < minDist) {						// TODO: See about getting not only one of these intersections reflected per run. Maybe store currentColliders in a two vectors so that you can massively reflect stuff when this happens. But the overhead probably isn't worth it, think through it a couple times.
 		float adjustment = minDist - distance;						// TODO: Instead of doing that, just reflect the particles directly in this code block, that would be an awesome solution, somehow, your going to need to be able to tell the reflector to do nothing though. Too much overhead?
 		toAlphaFromBeta *= adjustment / distance;
@@ -303,7 +300,9 @@ void Scene::step() {
 	while (true) {
 		lowestT = 1;
 		noCollisions = true;
+		invalidatedParticles.clear();
 		for (int i = 0; i < lastParticle; i++) {
+			if (particles[i].lastInteractionWasIntersection) { resolveIntersections(i); }
 			Vector2f remainingAlphaVel = particles[i].vel * currentSubStep;
 			findWallCollision(i, remainingAlphaVel);
 			for (int j = i + 1; j < particleCount; j++) {				// TODO: For loop does first iteration before checking right? If it doesn't that is unnecessary work here.

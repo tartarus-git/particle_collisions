@@ -7,10 +7,12 @@
 class Scene
 {
 public:
-	unsigned int width;
-	unsigned int height;
+	uint32_t width;
+	uint32_t height;
 
 	std::vector<Particle> particles;									// TODO: Write a destructor that handles releasing these even though they do it themselves anyway.
+	std::vector<size_t> lastIntersectionPartners;
+	std::vector<bool> lastIntersectionWasWithWall;
 	size_t particleCount;
 	size_t lastParticle;
 
@@ -29,10 +31,11 @@ public:
 	void loadParticles(std::vector<Particle>&& particles, size_t count);
 	void loadParticles(std::vector<Particle>&& particles);
 
-	void init();
+	void postLoadInit();
 
-	bool resolveIntersection(size_t aIndex, size_t bIndex);
-	bool resolveIntersections(size_t particleIndex);
+	bool resolveIntersectionWithBounds(size_t particleIndex);
+	bool resolveIntersectionWithParticle(size_t aIndex, size_t bIndex);
+	void resolveIntersections(size_t particleIndex);
 
 	void sortInvalidatedParticlesAndRemoveMultiples();
 	void recalculateInvalidatedData(size_t aIndex, size_t bIndex);

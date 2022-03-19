@@ -126,8 +126,8 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 	//particles.push_back(Particle(Vector2f(150, 150), Vector2f(0, -0.1f), 20, 1));
 	Scene scene;
 	scene.loadParticles(particles);
-	scene.init();
 	scene.loadSize(windowWidth, windowHeight);
+	scene.postLoadInit();
 
 	Renderer renderer(g);
 

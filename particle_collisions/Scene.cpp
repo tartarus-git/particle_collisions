@@ -1,5 +1,7 @@
 #include "Scene.h"
 
+#include <cmath>
+
 #include "debugOutput.h"
 
 void Scene::loadSize(unsigned int width, unsigned int height) { this->width = width; this->height = height; }
@@ -37,21 +39,18 @@ bool Scene::resolveIntersectionWithParticle(size_t aIndex, size_t bIndex) {
 	Particle& alpha = particles[aIndex];
 	Particle& beta = particles[bIndex];
 
-	float minDist = alpha.radius + beta.radius;
+	float minDistSquared = alpha.radius + beta.radius;
+	minDistSquared *= minDistSquared;
 	Vector2f toAlphaFromBeta = alpha.pos - beta.pos;
-	float distance = toAlphaFromBeta.getLength();
-	if ((lastIntersectionPartners[aIndex] != bIndex || lastIntersectionPartners[bIndex] != aIndex) && distance < minDist) {
-		float adjustment = minDist - distance;						// TODO: You should reflect the particles directly from this code block, that way, you save all the calculation required normally when resolving intersections where the particles are going towards each other.
+	float distance = toAlphaFromBeta.getSquareLength();
+	if ((lastIntersectionPartners[aIndex] != bIndex || lastIntersectionPartners[bIndex] != aIndex) && distance < minDistSquared) {
+		distance = sqrt(distance);
+		float adjustment = sqrt(minDistSquared) - distance;						// TODO: You should reflect the particles directly from this code block, that way, you save all the calculation required normally when resolving intersections where the particles are going towards each other.
 		//adjustment /= 2;										// TODO: Stack overflow when resolving intersections is way to common, rework the system so that they don't occur. You might need to switch to loops.
-		float massQuotient = alpha.mass / beta.mass;
-		float adjustedHalf = 3 * adjustment * massQuotient;
-		float adjustedBetaHalf = adjustedHalf / (massQuotient + adjustment);
-		float adjustedAlphaHalf = 2 * adjustment - adjustedBetaHalf;
 
-		Vector2f thing = toAlphaFromBeta * adjustedBetaHalf / distance;
-		Vector2f thing2 = toAlphaFromBeta * adjustedAlphaHalf / distance;
-		alpha.pos += thing2;
-		beta.pos -= thing;
+		float multiplier = adjustment / (distance * (alpha.mass + beta.mass));
+		alpha.pos += toAlphaFromBeta * (multiplier * beta.mass);
+		beta.pos -= toAlphaFromBeta * (multiplier * alpha.mass);
 		lastIntersectionPartners[aIndex] = bIndex;
 		lastIntersectionPartners[bIndex] = aIndex;
 		invalidatedParticles.push_back(bIndex);							// NOTE: Instead of putting this index in exactly the right spot, so that the list remains sorted (which would be O(n/2 * k) on average), we sort the list at the end (which probably gives us a better time complexity).

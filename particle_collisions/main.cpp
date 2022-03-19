@@ -156,7 +156,7 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 		}
 
 		if (addParticle) {
-			scene.particles.push_back(Particle(Vector2f(mouseX, mouseY), Vector2f(0, 0), 20, 1));
+			scene.particles.push_back(Particle(Vector2f(mouseX, mouseY), Vector2f(0, 0), 20, 10));
 			scene.particleCount++;
 			scene.lastParticle++;
 			scene.particles[scene.lastParticle].lastInteractionWasIntersection = true;

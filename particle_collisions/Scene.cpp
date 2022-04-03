@@ -17,25 +17,35 @@ void Scene::postLoadInit() {
 	for (size_t i = 0; i < lastIntersectionPartners.size(); i++) { lastIntersectionPartners[i] = i; lastIntersectionWasWithWall[i] = false; }
 }
 
-std::vector<size_t> invalidatedParticles;
+std::vector<size_t> intersectionStack;				// TODO: This doesn't have an upper limit though, even with the redundancy check. Rather it does, but that limit is super high. There is nothing to be done about that I guess.
+												// TODO: Calculate that upper limit with respect to the number of particles.
+std::vector<size_t> invalidatedParticles;				// TODO: This can cause crashes because it doesn't have an upper limit. Have every insertion check for previous occurrances to make sure the upper limit is respected. We don't want to consume too much memory.
 
 bool Scene::resolveIntersectionWithBounds(size_t particleIndex) {
 	if (lastIntersectionWasWithWall[particleIndex] && lastIntersectionPartners[particleIndex] == particleIndex) { return false; }
 	Particle& particle = particles[particleIndex];
 
+	bool thing = false;
+
 	uint32_t paddedWidth = width - particle.radius;
-	if (particle.pos.x > paddedWidth) { particle.pos.x = paddedWidth; }
-	else if (particle.pos.x < particle.radius) { particle.pos.x = particle.radius; }
+	if (particle.pos.x > paddedWidth) { particle.pos.x = paddedWidth; thing = true; }
+	else if (particle.pos.x < particle.radius) { particle.pos.x = particle.radius; thing = true; }
 
 	uint32_t paddedHeight = height - particle.radius;
-	if (particle.pos.y > paddedHeight) { particle.pos.y = paddedHeight; }
-	else if (particle.pos.y < particle.radius) { particle.pos.y = particle.radius; }
+	if (particle.pos.y > paddedHeight) { particle.pos.y = paddedHeight; thing = true; }
+	else if (particle.pos.y < particle.radius) { particle.pos.y = particle.radius; thing = true;}
+
+	if (thing == false) { return false; }
 
 	lastIntersectionWasWithWall[particleIndex] = true;
 	lastIntersectionPartners[particleIndex] = particleIndex;
+
+	return true;
 }
 
 bool Scene::resolveIntersectionWithParticle(size_t aIndex, size_t bIndex) {
+	//if (intersectionStack.size() != 1 && *(intersectionStack.end() - 2) == bIndex) { return false; }
+	// the goal was to not intersect with your parent, but that doesn't work like that with the current setup. Should we even be avoiding that?
 	Particle& alpha = particles[aIndex];
 	Particle& beta = particles[bIndex];
 
@@ -47,14 +57,15 @@ bool Scene::resolveIntersectionWithParticle(size_t aIndex, size_t bIndex) {
 		distance = sqrt(distance);
 		float adjustment = sqrt(minDistSquared) - distance;						// TODO: You should reflect the particles directly from this code block, that way, you save all the calculation required normally when resolving intersections where the particles are going towards each other.
 		//adjustment /= 2;										// TODO: Stack overflow when resolving intersections is way to common, rework the system so that they don't occur. You might need to switch to loops.
+		// Divide by two is actually not needed. The way it is now is perfect.
 
 		float multiplier = adjustment / (distance * (alpha.mass + beta.mass));
 		alpha.pos += toAlphaFromBeta * (multiplier * beta.mass);
 		beta.pos -= toAlphaFromBeta * (multiplier * alpha.mass);
 		lastIntersectionPartners[aIndex] = bIndex;
 		lastIntersectionPartners[bIndex] = aIndex;
+		intersectionStack.push_back(bIndex);
 		invalidatedParticles.push_back(bIndex);							// NOTE: Instead of putting this index in exactly the right spot, so that the list remains sorted (which would be O(n/2 * k) on average), we sort the list at the end (which probably gives us a better time complexity).
-		resolveIntersections(bIndex);						// TODO: Will this whole recursive approach bite us in our back-side eventually, should we use loops?
 		return true;
 	}
 	return false;
@@ -70,12 +81,19 @@ bool Scene::resolveIntersectionWithParticle(size_t aIndex, size_t bIndex) {
 // Seems like that would make a lot of things way faster, there's gotta be a good reason people haven't done that yet.
 
 void Scene::resolveIntersections(size_t particleIndex) {
+	intersectionStack.push_back(particleIndex);
 	while (true) {
+		debuglogger::out << (int)intersectionStack.size() << debuglogger::endl;
 		bool changed = false;
-		if (resolveIntersectionWithBounds(particleIndex)) { changed = true; }
-		for (size_t i = 0; i < particleIndex; i++) { if (resolveIntersectionWithParticle(particleIndex, i)) { changed = true; } }
-		for (size_t i = particleIndex + 1; i < particleCount; i++) { if (resolveIntersectionWithParticle(particleIndex, i)) { changed = true; } }
-		if (!changed) { break; }
+		size_t currentIntersectionParticleIndex = intersectionStack.back();
+		if (resolveIntersectionWithBounds(currentIntersectionParticleIndex)) { changed = true; }
+		for (size_t i = 0; i < currentIntersectionParticleIndex; i++) { if (resolveIntersectionWithParticle(currentIntersectionParticleIndex, i)) { changed = true; } }
+		for (size_t i = currentIntersectionParticleIndex + 1; i < particleCount; i++) { if (resolveIntersectionWithParticle(currentIntersectionParticleIndex, i)) { changed = true; } }
+		debuglogger::out << (int)intersectionStack.size() << debuglogger::endl;
+		if (!changed) {
+			intersectionStack.pop_back();
+			if (intersectionStack.size() == 0) { break; }
+		}
 	}
 }
 
@@ -84,7 +102,7 @@ void Scene::resolveIntersections(size_t particleIndex) {
 // Write some documentation in the code about what the different steps of this algorithm are and what the original algorithm looks like. Also explain the difference between the standard algorithm and the one shown in that one bookmarked blog-post.
 // Also write documentation for the function as a whole of course.
 void Scene::sortInvalidatedParticlesAndRemoveMultiples(size_t currentLoopIndex) {
-	bool* particleCounts = new bool[particleCount];
+	bool* particleCounts = new bool[particleCount];													// TODO: No reason to keep allocating this over and over, you can cache a global one and just resize that whenever you need to.
 	for (size_t i = 0; i < particleCount; i++) { particleCounts[i] = false; }
 	for (size_t i = 0; i < invalidatedParticles.size(); i++) { particleCounts[invalidatedParticles[i]] = true; }
 	size_t sortedInvalidatedParticlesIndex = 0;
@@ -316,7 +334,6 @@ void Scene::step() {
 		noCollisions = true;
 		invalidatedParticles.clear();
 		for (int i = 0; i < lastParticle - 1; i++) {
-																// TODO: When resolving intersections, make the mass play a role, so that massive objects get moved less and the smaller ones pick up more of the slack. It'll pull the most realism out of the process. This is super important because it'll look way better.
 			if (particles[i].lastInteractionWasIntersection) { resolveIntersections(i); recalculateInvalidatedData(i); particles[i].lastInteractionWasIntersection = false; }
 			Vector2f remainingAlphaVel = particles[i].vel * currentSubStep;
 			findWallCollision(i, remainingAlphaVel);

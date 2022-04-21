@@ -21,8 +21,28 @@ std::vector<size_t> intersectionStack;				// TODO: This doesn't have an upper li
 												// TODO: Calculate that upper limit with respect to the number of particles.
 std::vector<size_t> invalidatedParticles;				// TODO: This can cause crashes because it doesn't have an upper limit. Have every insertion check for previous occurrances to make sure the upper limit is respected. We don't want to consume too much memory.
 
+void addParticleToInvalidated(size_t index) {			// TODO: Is there a better way to do this without searching through array everytime you have to add, cuz that could happen a lot. Maybe only sort and remove multiples after it gets bigger than a certain size, that would get you speed plus reduced size.
+	bool thing = false;
+	for (size_t i = 0; i < invalidatedParticles.size(); i++) {
+		if (invalidatedParticles[i] == index) { thing = true; break; }
+	}
+	if (thing) {
+		return;
+	}
+	invalidatedParticles.push_back(index);
+}
+
+#define STACK_MAX_SIZE 100
+
+bool addParticleToStack(size_t index) {
+	if (intersectionStack.size() == STACK_MAX_SIZE) {
+		return false;
+	}
+	intersectionStack.push_back(index);
+	return true;
+}
+
 bool Scene::resolveIntersectionWithBounds(size_t particleIndex) {
-	if (lastIntersectionWasWithWall[particleIndex] && lastIntersectionPartners[particleIndex] == particleIndex) { return false; }
 	Particle& particle = particles[particleIndex];
 
 	bool thing = false;
@@ -37,13 +57,12 @@ bool Scene::resolveIntersectionWithBounds(size_t particleIndex) {
 
 	if (thing == false) { return false; }
 
-	lastIntersectionWasWithWall[particleIndex] = true;
-	lastIntersectionPartners[particleIndex] = particleIndex;
 
 	return true;
 }
 
 bool Scene::resolveIntersectionWithParticle(size_t aIndex, size_t bIndex) {
+
 	//if (intersectionStack.size() != 1 && *(intersectionStack.end() - 2) == bIndex) { return false; }
 	// the goal was to not intersect with your parent, but that doesn't work like that with the current setup. Should we even be avoiding that?
 	Particle& alpha = particles[aIndex];
@@ -53,19 +72,35 @@ bool Scene::resolveIntersectionWithParticle(size_t aIndex, size_t bIndex) {
 	minDistSquared *= minDistSquared;
 	Vector2f toAlphaFromBeta = alpha.pos - beta.pos;
 	float distance = toAlphaFromBeta.getSquareLength();
-	if ((lastIntersectionPartners[aIndex] != bIndex || lastIntersectionPartners[bIndex] != aIndex) && distance < minDistSquared) {
+	if (distance < minDistSquared) {
+
+
+		if (!addParticleToStack(bIndex)) {				// It's imperative that this is before the following code in this situation.
+														// If it isn't, a particle that would be pushed at the end but not allowed onto the intersection stack wouldn't have it's bound intersection checked, allowing particles to (temporarily) slip outside of the bounds, which would be terrible.
+			return false;
+		}
+
 		distance = sqrt(distance);
 		float adjustment = sqrt(minDistSquared) - distance;						// TODO: You should reflect the particles directly from this code block, that way, you save all the calculation required normally when resolving intersections where the particles are going towards each other.
 		//adjustment /= 2;										// TODO: Stack overflow when resolving intersections is way to common, rework the system so that they don't occur. You might need to switch to loops.
 		// Divide by two is actually not needed. The way it is now is perfect.
 
-		float multiplier = adjustment / (distance * (alpha.mass + beta.mass));
+		if (alpha.pos == beta.pos) {
+			beta.pos.y += adjustment;					// TODO: This arbitrary downwards direction should be replaced by a random push direction, to make things more natural should this situation occur. Trust me, it'll look waaaaay better.
+		} else {
+			beta.pos -= toAlphaFromBeta / distance * adjustment;
+		}
+
+		/*float multiplier = adjustment / (distance * (alpha.mass + beta.mass));
 		alpha.pos += toAlphaFromBeta * (multiplier * beta.mass);
-		beta.pos -= toAlphaFromBeta * (multiplier * alpha.mass);
-		lastIntersectionPartners[aIndex] = bIndex;
-		lastIntersectionPartners[bIndex] = aIndex;
-		intersectionStack.push_back(bIndex);
-		invalidatedParticles.push_back(bIndex);							// NOTE: Instead of putting this index in exactly the right spot, so that the list remains sorted (which would be O(n/2 * k) on average), we sort the list at the end (which probably gives us a better time complexity).
+		beta.pos -= toAlphaFromBeta * (multiplier * alpha.mass);*/
+		// This mass stuff can't be done because it doesn't work with our depth solution. It'll cause endless loops, it isn't good. TODO: probably elaborate.
+
+
+		//lastIntersectionPartners[aIndex] = bIndex;
+		//lastIntersectionPartners[bIndex] = aIndex;
+		addParticleToInvalidated(bIndex);
+		//invalidatedParticles.push_back(bIndex);							// NOTE: Instead of putting this index in exactly the right spot, so that the list remains sorted (which would be O(n/2 * k) on average), we sort the list at the end (which probably gives us a better time complexity).
 		return true;
 	}
 	return false;
@@ -80,20 +115,65 @@ bool Scene::resolveIntersectionWithParticle(size_t aIndex, size_t bIndex) {
 // TODO: Armed with all this knowledge, a question pops up: Why doesn't there exist some sort of instruction to actively tell the caching mechanism what memory you're going to need in the next couple of units of time? That way, there need not be any prediction at all, we can just tell the CPU what we want in advance.
 // Seems like that would make a lot of things way faster, there's gotta be a good reason people haven't done that yet.
 
+
+
+// TODO: Here is the issue at hand:
+// You want to refactor this code to make it look nice and avoid having it be such a mess.
+// The problem is that you can't see a good way to do a depth first search like the one below with loopified version. It'll work best with recursion.
+// The problem with that is that the stack's size is limited and not dynamically allocated, allowing it to have a much smaller maximum size. You'll hit recursion limits much faster than with the loopified and thereby heapified approach.
+// The solution is either to find a way to get a good loopified depth first search or to switch back to recursion, but set the stack size higher in the compiler output settings, which should be fine.
+// Recursion probably doesn't make as efficient use of the memory as loops do, because recursion has to setup stack frames and return pointers and push registers onto stack. Some of that can be optimized away, maybe even most of it, but some parts of that probably remain, which is suboptimal.
+
+
+// NOTE: Maximum stack size is fixed where-as maximum heap size is not (max heap size is pretty much determined by how big the stack allocation is, not by some predetermined number, that's what I mean).
+// The reason for this is that every thread needs it's own stack and if the sizes aren't predetermined, they'll step on each others feet. This sadly means that the stack can't reach the same heights as the heap.
+// This can be changed by changing the predetermined max size of the stack in the compiler settings, but it remains predetermined, and setting it higher will lower heap max size.
+// You might think that, if there were no other threads, just the main one, the compiler could dynamically allocate the stack and the heap, creating equal playing field for both.
+// That would theoretically be possible, instead of allocating the whole stack on program startup, you just allocate as much as you need in chunks. The compiler would have to write allocation requests into the binary, but it wouldn't be impossible at all.
+// Maybe compilers do that when there is just one thread, but I don't think they do. First of all, there seem to always be other threads, I don't know why, some system thing. A consequence of some of the DLL's that the program uses probably.
+// Second of all, I vaguely remember something about attaching new threads to processes that are already running. That functionality, should it exist, would also rely on fixed max stack sizes.
+// Basically, I think compilers probably don't have support for dynamic stacks because it is almost never needed.
+
+
+
 void Scene::resolveIntersections(size_t particleIndex) {
 	intersectionStack.push_back(particleIndex);
+	// Depth first search through all the particles.
+	size_t tempBreadthThing = 0;
 	while (true) {
+	thinglabel:
+
 		debuglogger::out << (int)intersectionStack.size() << debuglogger::endl;
-		bool changed = false;
 		size_t currentIntersectionParticleIndex = intersectionStack.back();
-		if (resolveIntersectionWithBounds(currentIntersectionParticleIndex)) { changed = true; }
-		for (size_t i = 0; i < currentIntersectionParticleIndex; i++) { if (resolveIntersectionWithParticle(currentIntersectionParticleIndex, i)) { changed = true; } }
-		for (size_t i = currentIntersectionParticleIndex + 1; i < particleCount; i++) { if (resolveIntersectionWithParticle(currentIntersectionParticleIndex, i)) { changed = true; } }
-		debuglogger::out << (int)intersectionStack.size() << debuglogger::endl;
-		if (!changed) {
-			intersectionStack.pop_back();
-			if (intersectionStack.size() == 0) { break; }
+
+		if (resolveIntersectionWithBounds(currentIntersectionParticleIndex)) {
+		for (size_t i = tempBreadthThing; i < currentIntersectionParticleIndex; i++) {
+			if (resolveIntersectionWithParticle(currentIntersectionParticleIndex, i)) {
+				tempBreadthThing = 0; goto thinglabel;
+			}
 		}
+		for (size_t i = ((tempBreadthThing < currentIntersectionParticleIndex + 1) ? (currentIntersectionParticleIndex + 1) : tempBreadthThing); i < particleCount; i++) {
+			if (resolveIntersectionWithParticle(currentIntersectionParticleIndex, i)) { tempBreadthThing = 0; goto thinglabel; }
+		}
+		} else {
+
+		for (size_t i = tempBreadthThing; i < currentIntersectionParticleIndex; i++) {
+			if (intersectionStack.size() >= 2 && *(intersectionStack.end() - 2) == i) { continue; }
+			if (resolveIntersectionWithParticle(currentIntersectionParticleIndex, i)) {
+				tempBreadthThing = 0; goto thinglabel;
+			}
+		}
+		for (size_t i = ((tempBreadthThing < currentIntersectionParticleIndex + 1) ? (currentIntersectionParticleIndex + 1) : tempBreadthThing); i < particleCount; i++) {
+			if (intersectionStack.size() >= 2 && *(intersectionStack.end() - 2) == i) { continue; }
+			if (resolveIntersectionWithParticle(currentIntersectionParticleIndex, i)) { tempBreadthThing = 0; goto thinglabel; }
+		}
+
+		}
+
+
+		tempBreadthThing = intersectionStack.back() + 1;
+		intersectionStack.pop_back();
+		if (intersectionStack.size() == 0) { break; }
 	}
 }
 

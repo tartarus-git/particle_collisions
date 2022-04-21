@@ -125,9 +125,9 @@ void graphicsLoop() {			// TODO: Just expose this g stuff in the library so we d
 	for (int i = 0; i < 100; i++) {
 		particles.push_back(Particle(Vector2f((rand() % (windowWidth - 200)) + 100, (rand() % (windowHeight - 200)) + 100), Vector2f(0.1f, 0), rand() % 20 + 5, 1));
 	}
-	//particles.push_back(Particle(Vector2f(100, 100), Vector2f(0.1f, 0), 20, 1));
-	//particles.push_back(Particle(Vector2f(200, 100), Vector2f(-0.1f, 0), 20, 1));
-	//particles.push_back(Particle(Vector2f(150, 150), Vector2f(0, -0.1f), 20, 1));
+	//particles.push_back(Particle(Vector2f(100, 100), Vector2f(0, 0), 20, 1));
+	//particles.push_back(Particle(Vector2f(200, 100), Vector2f(0, 0), 20, 1));
+	//particles.push_back(Particle(Vector2f(300, 100), Vector2f(0, 0), 20, 1));
 	Scene scene;
 	scene.loadParticles(particles);
 	scene.loadSize(windowWidth, windowHeight);

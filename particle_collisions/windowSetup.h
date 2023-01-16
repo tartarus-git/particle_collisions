@@ -101,7 +101,7 @@ LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void graphicsLoop();
 
 
-// TODO: There was definitely a reason why you included unicode friendly code here, I think maybe it has to work with unicode? Definitely look it up again though. We could technically remove it if it is unnecessary.
+// TODO: If unicode mode is enabled, the entry point must be wWinMain, otherwise it's WinMain. Try disabling the UNICODE define and all the other unicode related pieces in the build process, so that we can specialize for ANSI.
 #ifdef UNICODE
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* lpCmdLine, int nCmdShow) {
 #else

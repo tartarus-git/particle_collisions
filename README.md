@@ -14,6 +14,8 @@ Then we do the whole thing over again, as in find the closest meeting point, sim
 
 IMPORTANT: As stated above, that's just a basic description of the algorithm. Special care is taken to make sure the particles travel the entirety of their velocity step in each frame (which is easier said than done in the context of the above algorithm). We also have some interesting behavior for when two particles end up inside of each other (which should never actually happen without god-like interference from the user). Also, the particles have to bounce off of walls. There are a bunch of other small things to consider as well.
 
+NOTE: I realize that something like Verlet integration is much better suited to most applications, but I still think this project is cool. The main thing that makes it interesting for me is that Verlet integration approaches realism with smaller and smaller values for delta-t, but this project is absolutely realistic from the start, which is something Verlet integration can never hope to accomplish. This perspective of course ignores floating point inaccuracies, but those are in a league of their own and affect every physics simulation, no matter how realistic, so my point still stands.
+
 # How To Build
 It's a Visual Studio solution, so just clone the repo (recursively, there are submodules) and open it up in Visual Studio.
 

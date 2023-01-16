@@ -3,7 +3,7 @@ Pretty much exactly realistic particle collision simulator (except for floating 
 
 I will admit that the code isn't exactly pristine. It's very much still in development, but even in it's current state, the algorithm is pretty interesting.
 
-# Basic Descriptiong of Algorithm
+# Basic Description of Algorithm
 We put realism on the highest spot possible in the list of priorities in this project. This comes at the expense of speed.
 
 The source of the realism comes from the fact that there exists a closed-form solution to the problem of where two particles (each posessing a position and a velocity vector) will meet. We calculate this meeting point for every pair of particles (because the order of the particles in a pair is irrelevant, this has a much better time complexity than O(n^2), so that's nice).
